@@ -25,6 +25,16 @@ export interface OwnedMailboxSummary {
   lastSeenAt: Date
 }
 
+export interface OwnedMailboxListEntry extends OwnedMailboxSummary {
+  messageCount: number
+  unreadCount: number
+}
+
+export interface MailboxMessageCounts {
+  messageCount: number
+  unreadCount: number
+}
+
 export interface OwnedMailboxSnapshot extends OwnedMailboxSummary {
   messages: Array<SnapshotMessage>
 }
@@ -282,20 +292,94 @@ export async function listOwnedMailboxes(options: {
   db: Database
   userId: string
   limit?: number
-}): Promise<Array<OwnedMailboxSummary>> {
+}): Promise<Array<OwnedMailboxListEntry>> {
   const rows = await options.db
     .select({
       id: mailboxes.id,
       address: mailboxes.address,
       createdAt: mailboxes.createdAt,
       lastSeenAt: mailboxes.lastSeenAt,
+      messageCount: sql<number>`count(${messages.id})`,
+      unreadCount: sql<number>`count(case when ${messages.readAt} is null then ${messages.id} end)`,
     })
     .from(mailboxes)
+    .leftJoin(messages, eq(messages.mailboxId, mailboxes.id))
     .where(and(eq(mailboxes.userId, options.userId), isNull(mailboxes.endedAt)))
+    .groupBy(
+      mailboxes.id,
+      mailboxes.address,
+      mailboxes.createdAt,
+      mailboxes.lastSeenAt,
+    )
     .orderBy(desc(mailboxes.createdAt))
     .limit(options.limit ?? FIXED_MAILBOX_LIMIT)
 
-  return rows.map(toSummary)
+  return rows.map((row) => ({
+    id: row.id,
+    address: row.address,
+    createdAt: row.createdAt,
+    lastSeenAt: row.lastSeenAt,
+    messageCount: Number(row.messageCount),
+    unreadCount: Number(row.unreadCount),
+  }))
+}
+
+export async function markOwnedMessageRead(options: {
+  db: Database
+  userId: string
+  mailboxId: string
+  messageId: string
+  now?: Date
+}): Promise<MailboxMessageCounts | null> {
+  const now = options.now ?? new Date()
+
+  return withWriteLock(() =>
+    options.db.transaction(async (tx) => {
+      const mailbox = (
+        await tx
+          .select({ id: mailboxes.id })
+          .from(mailboxes)
+          .where(
+            and(
+              eq(mailboxes.id, options.mailboxId),
+              eq(mailboxes.userId, options.userId),
+              isNull(mailboxes.endedAt),
+            ),
+          )
+          .limit(1)
+      ).at(0)
+
+      if (!mailbox) {
+        return null
+      }
+
+      await tx
+        .update(messages)
+        .set({ readAt: now })
+        .where(
+          and(
+            eq(messages.id, options.messageId),
+            eq(messages.mailboxId, mailbox.id),
+            isNull(messages.readAt),
+          ),
+        )
+
+      const counts = (
+        await tx
+          .select({
+            messageCount: sql<number>`count(*)`,
+            unreadCount: sql<number>`count(case when ${messages.readAt} is null then 1 end)`,
+          })
+          .from(messages)
+          .where(eq(messages.mailboxId, mailbox.id))
+      ).at(0)
+
+      return {
+        messageCount: Number(counts?.messageCount ?? 0),
+        unreadCount: Number(counts?.unreadCount ?? 0),
+      }
+    }),
+  )
 }
 
 export async function readOwnedMailboxSnapshot(options: {

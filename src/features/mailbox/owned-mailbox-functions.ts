@@ -19,9 +19,13 @@ import {
   FIXED_MAILBOX_LIMIT,
   FIXED_MAILBOX_MESSAGE_LIMIT,
   listOwnedMailboxes,
+  markOwnedMessageRead,
   readOwnedMailboxSnapshot,
 } from './owned-mailbox-service'
-import type { OwnedMailboxSummary } from './owned-mailbox-service'
+import type {
+  MailboxMessageCounts,
+  OwnedMailboxSummary,
+} from './owned-mailbox-service'
 import { MailboxAddressInUseError } from './mailbox-service'
 import type {
   CreateMyMailboxResult,
@@ -29,6 +33,7 @@ import type {
   DashboardMailbox,
   DeleteMyMailboxResult,
   ListMyMailboxesResult,
+  MarkMyMessageReadResult,
   MyMailboxSnapshotResult,
 } from './types'
 
@@ -36,12 +41,16 @@ const CREATE_RATE_LIMIT = 10
 const DELETE_RATE_LIMIT = 10
 const RATE_WINDOW_MS = 60_000
 
-function serializeMailbox(mailbox: OwnedMailboxSummary): DashboardMailbox {
+function serializeMailbox(
+  mailbox: OwnedMailboxSummary & Partial<MailboxMessageCounts>,
+): DashboardMailbox {
   return {
     id: mailbox.id,
     address: mailbox.address,
     createdAt: mailbox.createdAt.toISOString(),
     lastSeenAt: mailbox.lastSeenAt.toISOString(),
+    messageCount: mailbox.messageCount ?? 0,
+    unreadCount: mailbox.unreadCount ?? 0,
   }
 }
 
@@ -213,6 +222,34 @@ export const getMyMailboxSnapshot = createServerFn({ method: 'GET' })
         receivedAt: message.receivedAt.toISOString(),
       })),
     }
+  })
+
+export const markMyMessageRead = createServerFn({ method: 'POST' })
+  .validator(
+    z.object({
+      mailboxId: z.string().trim().min(1).max(64),
+      messageId: z.string().trim().min(1).max(64),
+    }),
+  )
+  .handler(async ({ data }): Promise<MarkMyMessageReadResult> => {
+    const viewer = await requireViewer()
+
+    if (!viewer) {
+      return { status: 'unauthenticated' }
+    }
+
+    const counts = await markOwnedMessageRead({
+      db,
+      userId: viewer.id,
+      mailboxId: data.mailboxId,
+      messageId: data.messageId,
+    })
+
+    if (!counts) {
+      return { status: 'not_found' }
+    }
+
+    return { status: 'ok', ...counts }
   })
 
 export const deleteMyMailbox = createServerFn({ method: 'POST' })

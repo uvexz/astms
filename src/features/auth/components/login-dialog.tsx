@@ -209,7 +209,7 @@ export function LoginDialog({
 
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
-      <Dialog className="p-6 sm:p-8">
+      <Dialog className="max-h-[calc(100dvh-4rem)] overflow-y-auto px-6 py-5 sm:px-8 sm:py-6">
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
             <Dialog.Title className="text-lg">登录</Dialog.Title>
@@ -269,7 +269,7 @@ export function LoginDialog({
                   </Button>
                 ))}
                 <div className="mt-1">
-                  <Text variant="secondary" size="sm">
+                  <Text variant="secondary">
                     {enabledProviders
                       .map((provider) => AUTH_PROVIDER_DESCRIPTIONS[provider])
                       .join('、')}
@@ -280,10 +280,10 @@ export function LoginDialog({
 
             {emailPasswordLogin ? (
               <div className="grid gap-2 border-t border-kumo-line pt-4">
-                <Text variant="secondary" size="sm" bold>
+                <Text variant="secondary" bold>
                   邮箱密码登录
                 </Text>
-                <Text variant="secondary" size="sm">
+                <Text variant="secondary">
                   首次登录会自动注册账号，无需单独注册。
                 </Text>
                 <form
@@ -326,7 +326,7 @@ export function LoginDialog({
                     }}
                   />
                   {emailError ? (
-                    <Text variant="error" size="sm" role="alert">
+                    <Text variant="error" role="alert">
                       {emailError}
                     </Text>
                   ) : null}
@@ -353,7 +353,7 @@ export function LoginDialog({
         ) : null}
 
         <div className="mt-5 border-t border-kumo-line pt-4">
-          <Text variant="secondary" size="sm">
+          <Text variant="secondary">
             仅用于登录，不保存第三方密码，也不展示第三方邮箱。登录后可创建最多
             50 个固定邮箱。
           </Text>

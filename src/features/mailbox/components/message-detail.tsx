@@ -72,7 +72,7 @@ export function MessageDetail({
         </Text>
       </div>
 
-      <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-lg bg-kumo-base p-5 ring ring-kumo-line">
+      <div className="scrollbar-subtle mt-3 min-h-0 flex-1 overflow-y-auto rounded-lg bg-kumo-base px-5 py-4 ring ring-kumo-line">
         {view === 'html' && message.htmlBody ? (
           <HtmlMessageFrame html={message.htmlBody} />
         ) : message.textBody ? (

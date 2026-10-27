@@ -86,36 +86,26 @@ export function DashboardInboxPane(props: DashboardInboxPaneProps) {
                 className="text-kumo-inactive"
               />
             }
-            title="选择一个固定邮箱"
-            description="在左侧创建或选择邮箱后，即可在这里查看邮件。"
+            title="未选择邮箱"
+            description="从左侧选择或新建邮箱。"
           />
         </div>
       ) : (
         <>
-          <div className="flex items-start justify-between gap-4 px-6 pt-8 pb-4 sm:px-8 lg:px-16 lg:pt-16">
-            <div className="grid min-w-0 gap-1.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <Text as="h2" variant="heading">
-                  收件箱
-                </Text>
-                <Badge variant="secondary">固定邮箱</Badge>
-              </div>
-              <InlineCopyText
-                value={props.mailbox.address}
-                variant="body"
-                truncate
-                labels={{
-                  copyAction: `复制邮箱地址 ${props.mailbox.address}`,
-                  copied: '邮箱地址已复制',
-                }}
-              >
-                {props.mailbox.address}
-              </InlineCopyText>
-              <Text variant="secondary" size="sm">
-                不会过期，邮件会一直保留；关闭页面也不会丢失。
-              </Text>
-            </div>
-            <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <div className="flex items-center justify-between gap-4 px-6 pt-8 pb-4 sm:px-8 lg:px-16 lg:pt-16">
+            <InlineCopyText
+              value={props.mailbox.address}
+              variant="body"
+              bold
+              truncate
+              labels={{
+                copyAction: `复制邮箱地址 ${props.mailbox.address}`,
+                copied: '邮箱地址已复制',
+              }}
+            >
+              {props.mailbox.address}
+            </InlineCopyText>
+            <div className="shrink-0">
               <Badge variant={status.variant}>{status.label}</Badge>
             </div>
           </div>
@@ -127,7 +117,7 @@ export function DashboardInboxPane(props: DashboardInboxPaneProps) {
                 variant="alert"
                 icon={<WifiSlashIcon size={18} weight="fill" />}
                 title="网络已断开"
-                description="恢复后会自动继续同步；固定邮箱的邮件不会丢失。"
+                description="恢复后自动继续同步。"
               />
             ) : null}
 
@@ -137,7 +127,7 @@ export function DashboardInboxPane(props: DashboardInboxPaneProps) {
                 variant="error"
                 icon={<WarningCircleIcon size={18} weight="fill" />}
                 title="同步中断"
-                description="正在自动重试，你也可以稍后手动刷新。"
+                description="正在自动重试。"
               />
             ) : null}
 
@@ -147,8 +137,7 @@ export function DashboardInboxPane(props: DashboardInboxPaneProps) {
                   size="sm"
                   className="border-0 bg-transparent"
                   icon={<Loader size="lg" />}
-                  title="正在同步邮件"
-                  description="正在读取这个固定邮箱的邮件。"
+                  title="正在同步…"
                 />
               </div>
             ) : selectedMessage ? (
@@ -169,20 +158,20 @@ export function DashboardInboxPane(props: DashboardInboxPaneProps) {
                       className="text-kumo-inactive"
                     />
                   }
-                  title="正在等待邮件"
-                  description="把地址分享给需要的服务即可收信；邮件会一直保留。"
+                  title="等待邮件"
+                  description="地址分享出去后，新邮件会显示在这里。"
                 />
               </div>
             ) : (
-              <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="scrollbar-subtle min-h-0 flex-1 overflow-y-auto">
                 <MessageList
                   messages={props.messages}
                   onSelectMessage={props.onSelectMessage}
                 />
                 {props.messages.length >= props.messageLimit ? (
                   <div className="mt-3">
-                    <Text variant="secondary" size="sm">
-                      仅显示最近 {props.messageLimit} 封邮件。
+                    <Text variant="secondary">
+                      仅显示最近 {props.messageLimit} 封
                     </Text>
                   </div>
                 ) : null}

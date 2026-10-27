@@ -15,6 +15,7 @@ describe('sanitizeEmailHtml', () => {
     expect(output).not.toContain('javascript:')
     expect(output).toContain('Hello')
     expect(output).toContain('href="https://example.com"')
+    expect(output).toContain('target="_blank"')
     expect(output).toContain('rel="nofollow noopener noreferrer"')
   })
 

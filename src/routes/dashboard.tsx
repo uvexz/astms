@@ -18,6 +18,7 @@ import {
   getDashboardConfig,
   getMyMailboxSnapshot,
   listMyMailboxes,
+  markMyMessageRead,
 } from '#/features/mailbox/owned-mailbox-functions'
 import type {
   DashboardMailbox,
@@ -69,7 +70,7 @@ export const Route = createFileRoute('/dashboard')({
       },
       {
         name: 'description',
-        content: '管理固定邮箱、查看收件与复制地址。',
+        content: '管理固定邮箱与收件。',
       },
     ],
   }),
@@ -133,23 +134,40 @@ function DashboardPage() {
       mailboxes: initialMailboxes,
       limit: config.limit,
     } satisfies ListMyMailboxesResult,
+    enabled: online && visible,
+    refetchInterval: config.pollIntervalMs,
+    refetchIntervalInBackground: false,
     staleTime: 0,
     retry: false,
   })
 
   const mailboxes =
     listQuery.data.status === 'ok' ? listQuery.data.mailboxes : []
+  const sortedMailboxes = useMemo(() => {
+    const unread = mailboxes.filter((mailbox) => mailbox.unreadCount > 0)
+
+    if (unread.length === 0) {
+      return mailboxes
+    }
+
+    return [
+      ...unread,
+      ...mailboxes.filter((mailbox) => mailbox.unreadCount === 0),
+    ]
+  }, [mailboxes])
   const selectedMailbox = useMemo(() => {
     if (search.mailbox) {
-      const matched = mailboxes.find((mailbox) => mailbox.id === search.mailbox)
+      const matched = sortedMailboxes.find(
+        (mailbox) => mailbox.id === search.mailbox,
+      )
 
       if (matched) {
         return matched
       }
     }
 
-    return mailboxes.at(0) ?? null
-  }, [mailboxes, search.mailbox])
+    return sortedMailboxes.at(0) ?? null
+  }, [search.mailbox, sortedMailboxes])
 
   const snapshotQuery = useQuery({
     queryKey: ['my-mailbox-snapshot', selectedMailbox?.id ?? 'none'],
@@ -249,7 +267,7 @@ function DashboardPage() {
     setSelectedMessageId(null)
     toastManager.add({
       variant: 'warning',
-      title: '该邮箱已被删除或淘汰',
+      title: '邮箱已被删除',
     })
     void queryClient.invalidateQueries({ queryKey: ['my-mailboxes'] })
   }, [queryClient, selectedMailbox, snapshotQuery.data, toastManager])
@@ -276,7 +294,7 @@ function DashboardPage() {
       if (result.evictedAddress) {
         toastManager.add({
           variant: 'warning',
-          title: '已自动删除最久未打开的邮箱',
+          title: '已移除最久未打开的邮箱',
           description: result.evictedAddress,
         })
       }
@@ -309,7 +327,7 @@ function DashboardPage() {
       scrollToInbox()
     },
     onError: () => {
-      setCreateError('创建失败，请检查网络后重试')
+      setCreateError('创建失败，请稍后再试')
       setAnnouncement('创建失败，请稍后再试')
     },
   })
@@ -338,7 +356,7 @@ function DashboardPage() {
       } else {
         toastManager.add({
           variant: 'success',
-          title: '固定邮箱已删除',
+          title: '邮箱已删除',
         })
       }
 
@@ -360,7 +378,7 @@ function DashboardPage() {
 
       if (selectedMailbox?.id === mailboxId) {
         setSelectedMessageId(null)
-        const remaining = mailboxes.filter(
+        const remaining = sortedMailboxes.filter(
           (mailbox) => mailbox.id !== mailboxId,
         )
         void navigate({
@@ -374,6 +392,40 @@ function DashboardPage() {
         variant: 'error',
         title: '删除失败，请稍后再试',
       })
+    },
+  })
+
+  const markReadMutation = useMutation({
+    mutationFn: (input: { mailboxId: string; messageId: string }) =>
+      markMyMessageRead({ data: input }),
+    onSuccess: (result, input) => {
+      if (result.status === 'unauthenticated') {
+        handleUnauthorized()
+        return
+      }
+
+      if (result.status !== 'ok') {
+        return
+      }
+
+      queryClient.setQueryData<ListMyMailboxesResult>(
+        ['my-mailboxes'],
+        (previous) =>
+          previous && previous.status === 'ok'
+            ? {
+                ...previous,
+                mailboxes: previous.mailboxes.map((mailbox) =>
+                  mailbox.id === input.mailboxId
+                    ? {
+                        ...mailbox,
+                        messageCount: result.messageCount,
+                        unreadCount: result.unreadCount,
+                      }
+                    : mailbox,
+                ),
+              }
+            : previous,
+      )
     },
   })
 
@@ -391,6 +443,17 @@ function DashboardPage() {
     setSelectedMessageId(null)
     void navigate({ search: { mailbox: mailbox.id }, replace: true })
     scrollToInbox()
+  }
+
+  function handleSelectMessage(messageId: string) {
+    setSelectedMessageId(messageId)
+
+    if (selectedMailbox) {
+      markReadMutation.mutate({
+        mailboxId: selectedMailbox.id,
+        messageId,
+      })
+    }
   }
 
   function handleCreate() {
@@ -452,7 +515,7 @@ function DashboardPage() {
       <DashboardSidebar
         viewer={viewer}
         config={config}
-        mailboxes={mailboxes}
+        mailboxes={sortedMailboxes}
         selectedMailboxId={selectedMailbox?.id ?? null}
         prefix={prefix}
         createError={createError}
@@ -460,6 +523,7 @@ function DashboardPage() {
         isDeleting={deleteMutation.isPending}
         onPrefixChange={handlePrefixChange}
         onCreate={handleCreate}
+        onCreateTemporaryMailbox={() => void navigate({ to: '/' })}
         onSelectMailbox={handleSelectMailbox}
         onDeleteMailbox={setDeleteTarget}
         onCopyAddress={(address) => void copyAddress(address)}
@@ -472,7 +536,7 @@ function DashboardPage() {
         mailbox={selectedMailbox}
         messages={messages}
         selectedMessageId={selectedMessageId}
-        onSelectMessage={setSelectedMessageId}
+        onSelectMessage={handleSelectMessage}
         onBackToList={() => setSelectedMessageId(null)}
         online={online}
         isFetching={snapshotQuery.isFetching}
@@ -490,9 +554,9 @@ function DashboardPage() {
           }
         }}
       >
-        <Dialog className="p-6 sm:p-8">
+        <Dialog className="px-6 py-5 sm:px-8 sm:py-6">
           <div className="mb-4 flex items-start justify-between gap-4">
-            <Dialog.Title className="text-lg">删除固定邮箱？</Dialog.Title>
+            <Dialog.Title className="text-lg">删除邮箱？</Dialog.Title>
             <Dialog.Close
               aria-label="关闭删除确认"
               render={(props) => (
@@ -508,7 +572,7 @@ function DashboardPage() {
           </div>
           <Dialog.Description>
             <Text as="span" variant="secondary">
-              {deleteTarget?.address} 及其中所有邮件将立即删除，且无法恢复。
+              {deleteTarget?.address} 及全部邮件会被立即删除，无法恢复。
             </Text>
           </Dialog.Description>
           <div className="mt-5 flex justify-end gap-2">
@@ -520,7 +584,7 @@ function DashboardPage() {
               loading={deleteMutation.isPending}
               onClick={confirmDelete}
             >
-              删除邮箱
+              删除
             </Button>
           </div>
         </Dialog>

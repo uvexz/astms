@@ -75,7 +75,7 @@ export const Route = createFileRoute('/')({
   component: HomePage,
   errorComponent: () => (
     <div className="flex min-h-dvh items-center justify-center bg-kumo-base p-8">
-      <p className="text-base text-kumo-subtle">
+      <p className="text-[14px] text-kumo-subtle">
         服务配置暂时不可用，请稍后再试。
       </p>
     </div>
@@ -447,15 +447,13 @@ function HomePage() {
         onBackToList={() => setSelectedMessageId(null)}
         onRestart={handleRestart}
       />
-      {loginOpen ? (
-        <LoginDialog
-          open
-          onOpenChange={setLoginOpen}
-          providers={viewer.providers}
-          authReady={viewer.authReady}
-          emailPasswordLogin={viewer.emailPasswordLogin}
-        />
-      ) : null}
+      <LoginDialog
+        open={loginOpen}
+        onOpenChange={setLoginOpen}
+        providers={viewer.providers}
+        authReady={viewer.authReady}
+        emailPasswordLogin={viewer.emailPasswordLogin}
+      />
     </main>
   )
 }

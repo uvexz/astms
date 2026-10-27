@@ -42,7 +42,7 @@ export function sanitizeEmailHtml(html: string): string {
   return sanitizeHtml(html, {
     allowedTags: ALLOWED_TAGS,
     allowedAttributes: {
-      a: ['href', 'title', 'rel'],
+      a: ['href', 'title', 'rel', 'target'],
       th: ['colspan', 'rowspan'],
       td: ['colspan', 'rowspan'],
     },
@@ -54,6 +54,7 @@ export function sanitizeEmailHtml(html: string): string {
         tagName,
         attribs: {
           ...attribs,
+          target: '_blank',
           rel: 'nofollow noopener noreferrer',
         },
       }),

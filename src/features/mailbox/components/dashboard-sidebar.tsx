@@ -2,13 +2,11 @@ import {
   CopyIcon,
   EnvelopeSimpleIcon,
   HouseIcon,
-  InfoIcon,
   SignOutIcon,
   TrashIcon,
   UserCircleIcon,
 } from '@phosphor-icons/react'
 import { Badge } from '@cloudflare/kumo/components/badge'
-import { Banner } from '@cloudflare/kumo/components/banner'
 import { Button } from '@cloudflare/kumo/components/button'
 import { Empty } from '@cloudflare/kumo/components/empty'
 import { Text } from '@cloudflare/kumo/components/text'
@@ -16,7 +14,7 @@ import { Text } from '@cloudflare/kumo/components/text'
 import { getProviderLabel } from '#/features/auth/auth-providers'
 import type { ViewerUser } from '#/features/auth/types'
 
-import { formatAbsoluteTime } from '../format'
+import { formatShortDateTime } from '../format'
 import type { DashboardConfig, DashboardMailbox } from '../types'
 import { CreateFixedMailboxForm } from './create-fixed-mailbox-form'
 
@@ -31,6 +29,7 @@ interface DashboardSidebarProps {
   isDeleting: boolean
   onPrefixChange: (value: string) => void
   onCreate: () => void
+  onCreateTemporaryMailbox: () => void
   onSelectMailbox: (mailbox: DashboardMailbox) => void
   onDeleteMailbox: (mailbox: DashboardMailbox) => void
   onCopyAddress: (address: string) => void
@@ -65,6 +64,7 @@ export function DashboardSidebar({
   isDeleting,
   onPrefixChange,
   onCreate,
+  onCreateTemporaryMailbox,
   onSelectMailbox,
   onDeleteMailbox,
   onCopyAddress,
@@ -90,7 +90,7 @@ export function DashboardSidebar({
           title={`${providerLabel ? `${providerLabel} 账号` : '当前账号'} · ${viewer.name}`}
         >
           <ViewerAvatar viewer={viewer} />
-          <span className="max-w-24 truncate text-sm text-kumo-subtle">
+          <span className="max-w-24 truncate text-[14px] text-kumo-subtle">
             {viewer.name}
           </span>
           <Button
@@ -114,22 +114,16 @@ export function DashboardSidebar({
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 px-5 py-5">
-        <div>
-          <div className="flex items-center justify-between gap-2">
-            <Text as="h1" variant="heading">
-              我的邮箱
-            </Text>
+      <div className="flex min-h-0 flex-1 flex-col gap-3 px-5 py-4">
+        <div className="flex items-center justify-between gap-2">
+          <Text as="h1" variant="heading">
+            我的邮箱
+          </Text>
+          <span title={`满 ${config.limit} 个后，新建会移除最久未打开的邮箱`}>
             <Badge variant={atLimit ? 'warning' : 'secondary'}>
               {used} / {config.limit}
             </Badge>
-          </div>
-          <div className="mt-1">
-            <Text variant="secondary" size="sm">
-              固定邮箱不会过期；满 {config.limit}{' '}
-              个后新建会自动删除最久未打开的一个。
-            </Text>
-          </div>
+          </span>
         </div>
 
         <CreateFixedMailboxForm
@@ -137,11 +131,12 @@ export function DashboardSidebar({
           prefix={prefix}
           onPrefixChange={onPrefixChange}
           onSubmit={onCreate}
+          onCreateTemporaryMailbox={onCreateTemporaryMailbox}
           isCreating={isCreating}
           error={createError}
         />
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="scrollbar-subtle min-h-0 flex-1 overflow-y-auto">
           {mailboxes.length === 0 ? (
             <Empty
               size="sm"
@@ -153,57 +148,75 @@ export function DashboardSidebar({
                   className="text-kumo-inactive"
                 />
               }
-              title="还没有固定邮箱"
-              description="输入前缀或留空随机生成第一个固定邮箱。"
+              title="还没有邮箱"
+              description="输入前缀或留空，创建第一个邮箱。"
             />
           ) : (
-            <ul className="flex min-w-0 flex-col gap-1.5">
+            <ul className="flex min-w-0 flex-col gap-0.5">
               {mailboxes.map((mailbox) => {
                 const selected = mailbox.id === selectedMailboxId
 
                 return (
-                  <li key={mailbox.id} className="min-w-0">
+                  <li key={mailbox.id} className="group/row min-w-0">
                     <div
-                      className={
+                      className={[
+                        'relative flex min-w-0 items-center gap-0.5 rounded-lg p-1',
                         selected
-                          ? 'flex items-center gap-1 rounded-lg bg-kumo-tint px-1.5 py-1.5 ring-2 ring-kumo-brand'
-                          : 'flex items-center gap-1 rounded-lg px-1.5 py-1.5 hover:bg-kumo-tint/60'
-                      }
+                          ? 'bg-kumo-tint'
+                          : 'hover:bg-kumo-tint/60 focus-within:bg-kumo-tint/60',
+                      ].join(' ')}
                     >
+                      {selected ? (
+                        <span
+                          aria-hidden
+                          className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-kumo-brand"
+                        />
+                      ) : null}
+
                       <button
                         type="button"
                         onClick={() => onSelectMailbox(mailbox)}
-                        className="min-w-0 flex-1 rounded-md px-2 py-1 text-left focus-visible:ring-2 focus-visible:ring-kumo-brand focus-visible:outline-none"
                         aria-current={selected ? 'true' : undefined}
+                        title={`${mailbox.address} · 创建于 ${formatShortDateTime(mailbox.createdAt)}`}
+                        className="flex min-w-0 flex-1 flex-col gap-0.5 rounded px-2 py-1 text-left focus-visible:ring-2 focus-visible:ring-kumo-brand focus-visible:outline-none"
                       >
-                        <span className="block min-w-0">
-                          <Text as="span" bold truncate>
-                            {mailbox.address}
-                          </Text>
-                        </span>
-                        <span className="block">
-                          <Text as="span" variant="secondary" size="sm">
-                            创建于 {formatAbsoluteTime(mailbox.createdAt)}
-                          </Text>
-                        </span>
+                        <Text as="span" bold truncate>
+                          {mailbox.address}
+                        </Text>
+                        <Text
+                          as="span"
+                          variant={
+                            mailbox.unreadCount > 0 ? 'body' : 'secondary'
+                          }
+                          truncate
+                        >
+                          {mailbox.unreadCount > 0
+                            ? `${mailbox.unreadCount} 封未读 / ${mailbox.messageCount} 封邮件`
+                            : `${mailbox.messageCount} 封邮件`}
+                        </Text>
                       </button>
-                      <Button
-                        variant="ghost"
-                        shape="square"
-                        size="sm"
-                        icon={<CopyIcon size={16} />}
-                        aria-label={`复制邮箱地址 ${mailbox.address}`}
-                        onClick={() => onCopyAddress(mailbox.address)}
-                      />
-                      <Button
-                        variant="ghost"
-                        shape="square"
-                        size="sm"
-                        icon={<TrashIcon size={16} />}
-                        aria-label={`删除邮箱 ${mailbox.address}`}
-                        disabled={isDeleting}
-                        onClick={() => onDeleteMailbox(mailbox)}
-                      />
+
+                      <div className="flex shrink-0 items-center opacity-100 lg:opacity-0 lg:group-hover/row:opacity-100 lg:group-focus-within/row:opacity-100">
+                        <Button
+                          variant="ghost"
+                          shape="square"
+                          size="sm"
+                          icon={<CopyIcon size={16} />}
+                          aria-label={`复制邮箱地址 ${mailbox.address}`}
+                          title="复制地址"
+                          onClick={() => onCopyAddress(mailbox.address)}
+                        />
+                        <Button
+                          variant="ghost"
+                          shape="square"
+                          size="sm"
+                          icon={<TrashIcon size={16} />}
+                          aria-label={`删除邮箱 ${mailbox.address}`}
+                          title="删除邮箱"
+                          disabled={isDeleting}
+                          onClick={() => onDeleteMailbox(mailbox)}
+                        />
+                      </div>
                     </div>
                   </li>
                 )
@@ -211,14 +224,6 @@ export function DashboardSidebar({
             </ul>
           )}
         </div>
-      </div>
-
-      <div className="px-5 pb-5">
-        <Banner
-          variant="secondary"
-          icon={<InfoIcon size={18} weight="fill" />}
-          description="固定邮箱只有你能查看；地址可以分享给任何人用于收信。"
-        />
       </div>
     </aside>
   )

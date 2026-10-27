@@ -34,7 +34,7 @@ export function AuthEntry({
     return (
       <Button
         variant="secondary"
-        size="sm"
+        size="base"
         icon={<ViewerAvatar viewer={viewer} />}
         onClick={onDashboardClick}
         title={`${viewer.name} · 进入后台`}
@@ -48,7 +48,7 @@ export function AuthEntry({
   return (
     <Button
       variant="secondary"
-      size="sm"
+      size="base"
       icon={<SignInIcon size={16} />}
       onClick={onLoginClick}
     >

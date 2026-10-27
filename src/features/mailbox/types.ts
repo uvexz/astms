@@ -54,6 +54,8 @@ export interface DashboardMailbox {
   address: string
   createdAt: string
   lastSeenAt: string
+  messageCount: number
+  unreadCount: number
 }
 
 export interface DashboardConfig {
@@ -101,4 +103,9 @@ export type DeleteMyMailboxResult =
   | { status: 'deleted' }
   | { status: 'not_found' }
   | { status: 'rate_limited'; message: string }
+  | { status: 'unauthenticated' }
+
+export type MarkMyMessageReadResult =
+  | { status: 'ok'; messageCount: number; unreadCount: number }
+  | { status: 'not_found' }
   | { status: 'unauthenticated' }

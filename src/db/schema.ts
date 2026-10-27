@@ -52,6 +52,7 @@ export const messages = sqliteTable(
     htmlBody: text('html_body'),
     receivedAt: integer('received_at', { mode: 'timestamp_ms' }).notNull(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    readAt: integer('read_at', { mode: 'timestamp_ms' }),
   },
   (table) => [
     uniqueIndex('messages_mailbox_mailtrap_message_idx').on(

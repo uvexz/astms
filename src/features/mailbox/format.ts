@@ -7,6 +7,16 @@ const dateTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
   timeZone: 'Asia/Shanghai',
 })
 
+// Compact form for dense lists: 10月27日 19:39.
+const shortDateTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
+  month: 'long',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: 'Asia/Shanghai',
+})
+
 export function formatRemainingTime(seconds: number): string {
   const safe = Math.max(0, seconds)
   const minutes = Math.floor(safe / 60)
@@ -17,6 +27,11 @@ export function formatRemainingTime(seconds: number): string {
 export function formatAbsoluteTime(iso: string): string {
   const date = new Date(iso)
   return Number.isNaN(date.getTime()) ? '' : dateTimeFormatter.format(date)
+}
+
+export function formatShortDateTime(iso: string): string {
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime()) ? '' : shortDateTimeFormatter.format(date)
 }
 
 export function formatRelativeTime(iso: string, now = Date.now()): string {

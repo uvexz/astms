@@ -11,6 +11,7 @@ interface CreateFixedMailboxFormProps {
   prefix: string
   onPrefixChange: (value: string) => void
   onSubmit: () => void
+  onCreateTemporaryMailbox: () => void
   isCreating: boolean
   error: string | null
 }
@@ -20,6 +21,7 @@ export function CreateFixedMailboxForm({
   prefix,
   onPrefixChange,
   onSubmit,
+  onCreateTemporaryMailbox,
   isCreating,
   error,
 }: CreateFixedMailboxFormProps) {
@@ -29,60 +31,71 @@ export function CreateFixedMailboxForm({
 
   return (
     <form
-      className="grid gap-2"
+      className="grid gap-3"
       onSubmit={(event) => {
         event.preventDefault()
         onSubmit()
       }}
       aria-busy={isCreating}
     >
-      <InputGroup
-        error={error ? { message: error, match: true } : undefined}
-        disabled={isCreating}
-        size="base"
-        className="w-full"
-      >
-        <InputGroup.Input
-          value={prefix}
-          onChange={(event) => onPrefixChange(event.target.value)}
-          placeholder="输入前缀，留空随机生成"
-          maxLength={64}
-          autoComplete="off"
-          autoCapitalize="none"
-          spellCheck={false}
-          passwordManagerIgnore
-          aria-label="固定邮箱前缀"
-        />
-        <InputGroup.Suffix>@{config.domain}</InputGroup.Suffix>
-      </InputGroup>
+      <div className="grid gap-1.5">
+        <InputGroup
+          error={error ? { message: error, match: true } : undefined}
+          disabled={isCreating}
+          size="base"
+          className="w-full"
+        >
+          <InputGroup.Input
+            value={prefix}
+            onChange={(event) => onPrefixChange(event.target.value)}
+            placeholder="输入前缀，留空随机"
+            maxLength={64}
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            passwordManagerIgnore
+            aria-label="固定邮箱前缀"
+          />
+          <InputGroup.Suffix>@{config.domain}</InputGroup.Suffix>
+        </InputGroup>
 
-      {showPreview ? (
-        <Text variant="secondary" size="sm">
-          点号会被忽略，将创建 {normalizedPrefix}@{config.domain}
+        {showPreview ? (
+          <Text variant="secondary">
+            点号会被忽略，将创建 {normalizedPrefix}@{config.domain}
+          </Text>
+        ) : (
+          <Text variant="secondary">3–32 位，字母、数字或 -</Text>
+        )}
+      </div>
+
+      {error ? (
+        <Text variant="error" role="alert">
+          {error}
         </Text>
       ) : null}
 
-      {error ? (
-        <Text variant="error" size="sm" role="alert">
-          {error}
-        </Text>
-      ) : (
-        <Text variant="secondary" size="sm">
-          {config.prefixRuleMessage}
-        </Text>
-      )}
-
-      <Button
-        type="submit"
-        variant="primary"
-        size="base"
-        className="w-full"
-        loading={isCreating}
-        disabled={isCreating}
-        icon={<PlusIcon size={16} />}
-      >
-        创建固定邮箱
-      </Button>
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          type="submit"
+          variant="primary"
+          size="base"
+          className="w-full"
+          loading={isCreating}
+          disabled={isCreating}
+          icon={<PlusIcon size={16} />}
+        >
+          创建邮箱
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          size="base"
+          className="w-full"
+          onClick={onCreateTemporaryMailbox}
+        >
+          创建临时邮箱
+        </Button>
+      </div>
     </form>
   )
 }

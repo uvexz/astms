@@ -15,6 +15,7 @@ import {
   deleteOwnedMailbox,
   FIXED_MAILBOX_EXPIRES_AT,
   listOwnedMailboxes,
+  markOwnedMessageRead,
   readOwnedMailboxSnapshot,
 } from './owned-mailbox-service'
 
@@ -328,6 +329,102 @@ describe('owned fixed mailboxes', () => {
 
     expect(await db.select().from(messages)).toHaveLength(0)
     expect(await db.select().from(mailboxes)).toHaveLength(0)
+  })
+
+  test('reports unread counts and marks a message read once', async () => {
+    const userId = await insertUser(db)
+    const created = await createOwnedMailboxWithPrefix({
+      db,
+      domain: DOMAIN,
+      userId,
+      prefix: 'counted-box',
+      now: START,
+    })
+
+    expect(created.status).toBe('active')
+
+    if (created.status !== 'active') {
+      return
+    }
+
+    const firstMessageId = await insertMessage(db, created.mailbox.id, 'first')
+    await insertMessage(db, created.mailbox.id, 'second')
+    await insertMessage(db, created.mailbox.id, 'third')
+
+    const [listed] = await listOwnedMailboxes({ db, userId })
+    expect(listed.messageCount).toBe(3)
+    expect(listed.unreadCount).toBe(3)
+
+    const counts = await markOwnedMessageRead({
+      db,
+      userId,
+      mailboxId: created.mailbox.id,
+      messageId: firstMessageId,
+      now: at(10),
+    })
+
+    expect(counts).toEqual({ messageCount: 3, unreadCount: 2 })
+
+    const [message] = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.id, firstMessageId))
+
+    expect(message.readAt?.toISOString()).toBe(at(10).toISOString())
+
+    const repeated = await markOwnedMessageRead({
+      db,
+      userId,
+      mailboxId: created.mailbox.id,
+      messageId: firstMessageId,
+      now: at(20),
+    })
+
+    expect(repeated).toEqual({ messageCount: 3, unreadCount: 2 })
+
+    const [unchanged] = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.id, firstMessageId))
+
+    expect(unchanged.readAt?.toISOString()).toBe(at(10).toISOString())
+  })
+
+  test('only the owner can mark messages read', async () => {
+    const owner = await insertUser(db)
+    const stranger = await insertUser(db)
+    const created = await createOwnedMailboxWithPrefix({
+      db,
+      domain: DOMAIN,
+      userId: owner,
+      prefix: 'read-private-box',
+      now: START,
+    })
+
+    expect(created.status).toBe('active')
+
+    if (created.status !== 'active') {
+      return
+    }
+
+    const messageId = await insertMessage(db, created.mailbox.id, 'private')
+
+    expect(
+      await markOwnedMessageRead({
+        db,
+        userId: stranger,
+        mailboxId: created.mailbox.id,
+        messageId,
+        now: at(10),
+      }),
+    ).toBeNull()
+
+    const [message] = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.id, messageId))
+
+    expect(message.readAt).toBeNull()
   })
 
   test('keeps fixed mailboxes readable regardless of elapsed time', async () => {

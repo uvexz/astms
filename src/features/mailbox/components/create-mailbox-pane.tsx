@@ -107,11 +107,11 @@ export function CreateMailboxPane({
             </InputGroup>
 
             {formError ? (
-              <Text variant="error" size="sm" role="alert">
+              <Text variant="error" role="alert">
                 {formError}
               </Text>
             ) : isActive ? (
-              <Text variant="secondary" size="sm">
+              <Text variant="secondary">
                 页面保持在前台会每 {Math.round(config.pollIntervalMs / 1_000)}{' '}
                 秒自动续期。
               </Text>
@@ -147,7 +147,7 @@ export function CreateMailboxPane({
 
           {isLoggedIn && !isActive ? (
             <div className="mt-3">
-              <Text variant="secondary" size="sm">
+              <Text variant="secondary">
                 首页创建的是临时地址；固定邮箱请到后台创建。
               </Text>
             </div>

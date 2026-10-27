@@ -54,13 +54,17 @@ export function LinkifiedText({ text }: { text: string }) {
   }
 
   return (
-    <div className="text-base leading-6 break-words whitespace-pre-wrap text-kumo-default">
+    <div className="text-[14px] leading-6 break-words whitespace-pre-wrap text-kumo-default">
       {nodes.length > 0 ? nodes : text}
     </div>
   )
 }
 
 const FRAME_STYLES = `
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(0 0 0 / 0.28) transparent;
+  }
   body {
     margin: 0;
     padding: 0;
@@ -81,6 +85,7 @@ export function HtmlMessageFrame({ html }: { html: string }) {
   <head>
     <meta charset="utf-8" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:;" />
+    <base target="_blank" />
     <style>${FRAME_STYLES}</style>
   </head>
   <body>${html}</body>
@@ -89,7 +94,7 @@ export function HtmlMessageFrame({ html }: { html: string }) {
   return (
     <iframe
       title="邮件 HTML 正文"
-      sandbox=""
+      sandbox="allow-popups allow-popups-to-escape-sandbox"
       referrerPolicy="no-referrer"
       srcDoc={document}
       className="h-96 w-full rounded-md bg-white"

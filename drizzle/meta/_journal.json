@@ -15,6 +15,13 @@
       "when": 1793087831249,
       "tag": "0001_fine_nico_minoru",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793107123024,
+      "tag": "0002_watery_zemo",
+      "breakpoints": true
     }
   ]
 }

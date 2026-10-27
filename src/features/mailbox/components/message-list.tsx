@@ -1,6 +1,6 @@
 import { Text } from '@cloudflare/kumo/components/text'
 
-import { formatAbsoluteTime, formatSender, messagePreview } from '../format'
+import { formatShortDateTime, formatSender, messagePreview } from '../format'
 import type { MailboxMessageView } from '../types'
 
 export function MessageList({
@@ -17,7 +17,7 @@ export function MessageList({
           <button
             type="button"
             onClick={() => onSelectMessage(message.id)}
-            className="w-full rounded-lg bg-kumo-base px-5 py-4 text-left ring ring-kumo-line hover:bg-kumo-tint focus-visible:ring-2 focus-visible:ring-kumo-brand focus-visible:outline-none"
+            className="w-full rounded-lg bg-kumo-base px-5 py-4 text-left ring ring-kumo-line ring-inset hover:bg-kumo-tint focus-visible:ring-2 focus-visible:ring-kumo-brand focus-visible:outline-none"
           >
             <span className="flex items-baseline justify-between gap-4">
               <Text as="span" bold truncate>
@@ -25,7 +25,7 @@ export function MessageList({
               </Text>
               <span className="shrink-0">
                 <Text as="span" variant="secondary">
-                  {formatAbsoluteTime(message.receivedAt)}
+                  {formatShortDateTime(message.receivedAt)}
                 </Text>
               </span>
             </span>
