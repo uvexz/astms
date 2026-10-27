@@ -77,7 +77,7 @@ export function CreateMailboxPane({
               description={
                 isActive
                   ? `页面保持在前台会每 ${Math.round(config.pollIntervalMs / 1_000)} 秒自动续期。`
-                  : `${config.prefixRuleMessage}。留空将随机生成 10–12 位地址。`
+                  : `${config.prefixRuleMessage}。留空将随机生成类似 tom-holland150 的地址。`
               }
               error={
                 formError ? { message: formError, match: true } : undefined

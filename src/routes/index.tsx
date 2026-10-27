@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
+import { useKumoToastManager } from '@cloudflare/kumo/components/toast'
 
 import { validatePrefix } from '#/features/mailbox/address'
 import { CreateMailboxPane } from '#/features/mailbox/components/create-mailbox-pane'
@@ -46,8 +47,10 @@ export const Route = createFileRoute('/')({
 function HomePage() {
   const config = Route.useLoaderData()
   const queryClient = useQueryClient()
+  const toastManager = useKumoToastManager()
   const { online, visible } = useBrowserAvailability()
   const inputRef = useRef<HTMLInputElement>(null)
+  const inboxRef = useRef<HTMLElement>(null)
 
   const [phase, setPhase] = useState<MailboxPhase>('idle')
   const [address, setAddress] = useState<string | null>(null)
@@ -159,6 +162,31 @@ function HomePage() {
     hasLoadedSnapshotRef.current = true
   }, [address, snapshotQuery.data, queryClient])
 
+  async function copyAddressToClipboard(value: string) {
+    try {
+      await navigator.clipboard.writeText(value)
+      toastManager.add({
+        variant: 'success',
+        title: '邮箱地址已复制',
+        description: value,
+      })
+    } catch {
+      toastManager.add({
+        variant: 'warning',
+        title: '未能自动复制地址',
+        description: `请手动复制：${value}`,
+      })
+    }
+  }
+
+  function scrollToInboxOnMobile() {
+    if (window.matchMedia('(min-width: 1024px)').matches) {
+      return
+    }
+
+    inboxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   const createMutation = useMutation({
     mutationFn: (value: string) =>
       createMailbox({ data: { prefix: value || undefined } }),
@@ -212,6 +240,9 @@ function HomePage() {
       } catch {
         // Refreshing will simply start from the idle state.
       }
+
+      void copyAddressToClipboard(result.address)
+      scrollToInboxOnMobile()
     },
     onError: () => {
       setFormError('创建失败，请检查网络后重试')
@@ -309,6 +340,7 @@ function HomePage() {
         inputRef={inputRef}
       />
       <InboxPane
+        sectionRef={inboxRef}
         phase={phase}
         address={address}
         messages={messages}

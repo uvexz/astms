@@ -7,7 +7,72 @@ const PREFIX_PATTERN = /^[a-z0-9][a-z0-9-]{4,30}[a-z0-9]$/
 const LOCAL_PART_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/
 const DOMAIN_PATTERN =
   /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/
-const ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789'
+
+export const RANDOM_FIRST_NAMES: readonly string[] = [
+  'alex',
+  'ben',
+  'chris',
+  'daniel',
+  'david',
+  'ethan',
+  'george',
+  'harry',
+  'henry',
+  'jack',
+  'jacob',
+  'james',
+  'john',
+  'kevin',
+  'leo',
+  'lucas',
+  'mark',
+  'mason',
+  'matthew',
+  'nathan',
+  'noah',
+  'oliver',
+  'oscar',
+  'peter',
+  'ryan',
+  'sam',
+  'thomas',
+  'tom',
+  'william',
+  'zack',
+]
+
+export const RANDOM_LAST_NAMES: readonly string[] = [
+  'adams',
+  'allen',
+  'baker',
+  'brooks',
+  'campbell',
+  'carter',
+  'clark',
+  'cooper',
+  'davis',
+  'evans',
+  'fisher',
+  'foster',
+  'gray',
+  'green',
+  'hall',
+  'harris',
+  'hayes',
+  'holland',
+  'jackson',
+  'king',
+  'lewis',
+  'martin',
+  'miller',
+  'moore',
+  'morgan',
+  'parker',
+  'reed',
+  'turner',
+  'walker',
+  'young',
+]
 
 export type PrefixValidation =
   { ok: true; prefix: string } | { ok: false; message: string }
@@ -59,23 +124,20 @@ export function formatMailboxAddress(prefix: string, domain: string): string {
 }
 
 function randomIndex(maxExclusive: number): number {
-  const limit = Math.floor(256 / maxExclusive) * maxExclusive
-  const bytes = new Uint8Array(1)
+  const limit = Math.floor(0x100000000 / maxExclusive) * maxExclusive
+  const values = new Uint32Array(1)
 
   do {
-    crypto.getRandomValues(bytes)
-  } while (bytes[0] >= limit)
+    crypto.getRandomValues(values)
+  } while (values[0] >= limit)
 
-  return bytes[0] % maxExclusive
+  return values[0] % maxExclusive
 }
 
 export function generateRandomPrefix(): string {
-  const length = 10 + randomIndex(3)
-  let prefix = ''
+  const firstName = RANDOM_FIRST_NAMES[randomIndex(RANDOM_FIRST_NAMES.length)]
+  const lastName = RANDOM_LAST_NAMES[randomIndex(RANDOM_LAST_NAMES.length)]
+  const number = 100 + randomIndex(900)
 
-  while (prefix.length < length) {
-    prefix += ALPHABET[randomIndex(ALPHABET.length)]
-  }
-
-  return prefix
+  return `${firstName}-${lastName}${number}`
 }

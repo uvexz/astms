@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { RefObject } from 'react'
 
 import {
   ArrowCounterClockwiseIcon,
@@ -29,6 +30,7 @@ import { HtmlMessageFrame, LinkifiedText } from './message-body'
 type StatusVariant = 'success' | 'warning' | 'error' | 'info'
 
 interface InboxPaneProps {
+  sectionRef: RefObject<HTMLElement | null>
   phase: MailboxPhase
   address: string | null
   messages: Array<MailboxMessageView>
@@ -78,6 +80,7 @@ export function InboxPane(props: InboxPaneProps) {
 
   return (
     <section
+      ref={props.sectionRef}
       aria-label="收件箱"
       className="flex min-h-dvh flex-col bg-kumo-recessed text-kumo-default lg:h-dvh lg:min-h-0 lg:overflow-hidden"
     >

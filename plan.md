@@ -42,7 +42,7 @@
 
 - 地址格式：`prefix@MAILBOX_DOMAIN`。
 - 前缀统一 trim、转小写，只允许字母、数字和 `-`，长度建议 6–32；必须以字母或数字开头和结尾。未登录用户不低于 6 位。
-- 空前缀使用加密安全随机源生成 10–12 位小写字母数字前缀。
+- 空前缀使用加密安全随机源，从 30 个名、30 个姓中随机组合，生成「名-姓+随机三位数」前缀（如 `tom-holland150`）。
 - 同一时刻同一地址只能对应一个有效邮箱。
 - 对仍有效的相同地址点击“开始收件”时直接打开现有邮箱，而不是报冲突；任意前台查看者都可读取并续期，这与公开访问模型一致。
 - 过期地址允许再次创建；新邮箱使用新的内部 ID，不继承旧邮件。
@@ -385,7 +385,7 @@ bun run build
 
 **邮箱生命周期**
 
-- `src/features/mailbox/address.ts`：trim/小写、6–32 位校验、Web Crypto 随机 10–12 位前缀、完整地址与收件人规范化。
+- `src/features/mailbox/address.ts`：trim/小写、6–32 位校验、Web Crypto 随机「名-姓+三位数」前缀、完整地址与收件人规范化。
 - `src/features/mailbox/mailbox-service.ts`：事务内结束过期记录 → 复用有效地址或创建；部分唯一索引兜底并发；轮询事务续期；过期快照不返回历史邮件；清理函数。
 - `src/server/write-lock.ts`：本地 libSQL 单连接写锁，避免 `TRANSACTION_ACTIVE`；Turso 多实例仍由唯一索引兜底。
 - Server Functions：`getMailboxPublicConfig` / `createMailbox` / `getMailboxSnapshot`，含内存速率限制（20 次/分钟/IP）。

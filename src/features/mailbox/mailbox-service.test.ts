@@ -103,7 +103,7 @@ describe('mailbox lifecycle', () => {
       now: START,
     })
 
-    expect(created.address).toMatch(/^[a-z0-9]{10,12}@example\.test$/)
+    expect(created.address).toMatch(/^[a-z]+-[a-z]+\d{3}@example\.test$/)
     expect(created.joinedExisting).toBe(false)
   })
 

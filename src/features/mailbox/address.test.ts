@@ -5,6 +5,8 @@ import {
   generateRandomPrefix,
   normalizeAddress,
   normalizePrefix,
+  RANDOM_FIRST_NAMES,
+  RANDOM_LAST_NAMES,
   validatePrefix,
 } from './address'
 
@@ -43,14 +45,32 @@ describe('validatePrefix', () => {
 })
 
 describe('generateRandomPrefix', () => {
-  test('generates 10-12 lowercase alphanumeric characters', () => {
-    for (let i = 0; i < 100; i += 1) {
+  test('combines a first name, last name, and three-digit number', () => {
+    for (let i = 0; i < 200; i += 1) {
       const prefix = generateRandomPrefix()
-      expect(prefix.length).toBeGreaterThanOrEqual(10)
-      expect(prefix.length).toBeLessThanOrEqual(12)
-      expect(prefix).toMatch(/^[a-z0-9]+$/)
+      const match = /^([a-z]+)-([a-z]+)(\d{3})$/.exec(prefix)
+
+      expect(match).not.toBeNull()
       expect(validatePrefix(prefix).ok).toBe(true)
+
+      if (!match) {
+        continue
+      }
+
+      expect(RANDOM_FIRST_NAMES).toContain(match[1])
+      expect(RANDOM_LAST_NAMES).toContain(match[2])
+
+      const number = Number(match[3])
+      expect(number).toBeGreaterThanOrEqual(100)
+      expect(number).toBeLessThanOrEqual(999)
     }
+  })
+
+  test('ships 30 unique first and last names', () => {
+    expect(RANDOM_FIRST_NAMES).toHaveLength(30)
+    expect(new Set(RANDOM_FIRST_NAMES).size).toBe(30)
+    expect(RANDOM_LAST_NAMES).toHaveLength(30)
+    expect(new Set(RANDOM_LAST_NAMES).size).toBe(30)
   })
 })
 

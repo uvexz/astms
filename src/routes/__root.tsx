@@ -5,6 +5,7 @@ import {
 } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
+import { Toasty } from '@cloudflare/kumo/components/toast'
 
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
@@ -56,7 +57,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body className="bg-kumo-canvas text-kumo-default antialiased">
-        <div className="isolate">{children}</div>
+        <Toasty>
+          <div className="isolate">{children}</div>
+        </Toasty>
         <TanStackDevtools
           config={{
             position: 'bottom-right',
