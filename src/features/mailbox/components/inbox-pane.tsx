@@ -1,10 +1,9 @@
 import { useState } from 'react'
-import type { RefObject } from 'react'
+import type { ReactNode, RefObject } from 'react'
 
 import {
   ArrowCounterClockwiseIcon,
   ArrowLeftIcon,
-  AtIcon,
   ClockCountdownIcon,
   EnvelopeSimpleIcon,
   WarningCircleIcon,
@@ -25,6 +24,7 @@ import {
   messagePreview,
 } from '../format'
 import type { MailboxMessageView, MailboxPhase } from '../types'
+import { MatrixRain } from './matrix-rain'
 import { HtmlMessageFrame, LinkifiedText } from './message-body'
 
 type StatusVariant = 'success' | 'warning' | 'error' | 'info'
@@ -95,20 +95,14 @@ export function InboxPane(props: InboxPaneProps) {
 
       {props.phase === 'idle' ? (
         <div className="flex flex-1 items-center justify-center px-6 py-12 lg:px-20">
-          <Empty
-            size="lg"
-            icon={
-              <span className="astms-float inline-flex">
-                <AtIcon
-                  size={64}
-                  weight="light"
-                  className="text-kumo-inactive"
-                />
-              </span>
-            }
-            title="准备开始"
-            description="在左侧输入前缀，或直接点击“开始收件”。"
-          />
+          <MatrixCard>
+            <Empty
+              size="lg"
+              className="min-h-80 justify-center border-0 bg-transparent"
+              title="准备开始"
+              description="在左侧输入前缀，或直接点击“开始收件”。"
+            />
+          </MatrixCard>
         </div>
       ) : null}
 
@@ -218,18 +212,21 @@ export function InboxPane(props: InboxPaneProps) {
               />
             ) : props.messages.length === 0 ? (
               <div className="flex flex-1 items-center justify-center">
-                <Empty
-                  size="sm"
-                  icon={
-                    <EnvelopeSimpleIcon
-                      size={36}
-                      weight="duotone"
-                      className="text-kumo-inactive"
-                    />
-                  }
-                  title="正在等待邮件"
-                  description="保持页面在前台，新邮件会自动出现在这里。"
-                />
+                <MatrixCard>
+                  <Empty
+                    size="sm"
+                    className="border-0 bg-transparent"
+                    icon={
+                      <EnvelopeSimpleIcon
+                        size={36}
+                        weight="duotone"
+                        className="text-kumo-inactive"
+                      />
+                    }
+                    title="正在等待邮件"
+                    description="保持页面在前台，新邮件会自动出现在这里。"
+                  />
+                </MatrixCard>
               </div>
             ) : (
               <ul className="flex min-w-0 flex-col gap-2">
@@ -265,6 +262,15 @@ export function InboxPane(props: InboxPaneProps) {
         </>
       ) : null}
     </section>
+  )
+}
+
+function MatrixCard({ children }: { children: ReactNode }) {
+  return (
+    <div className="relative w-full overflow-hidden rounded-xl border border-kumo-fill bg-kumo-control">
+      <MatrixRain className="pointer-events-none absolute inset-0 h-full w-full text-kumo-success" />
+      <div className="relative h-full">{children}</div>
+    </div>
   )
 }
 
