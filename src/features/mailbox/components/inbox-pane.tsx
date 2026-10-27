@@ -113,6 +113,7 @@ export function InboxPane(props: InboxPaneProps) {
         <div className="flex flex-1 items-center justify-center px-6 py-12">
           <Empty
             size="lg"
+            className="border-0 bg-transparent"
             icon={<Loader size="lg" />}
             title="正在准备地址"
             description="马上就好，正在创建临时收件箱。"
@@ -124,6 +125,7 @@ export function InboxPane(props: InboxPaneProps) {
         <div className="flex flex-1 items-center justify-center px-6 py-12">
           <Empty
             size="sm"
+            className="border-0 bg-transparent"
             icon={
               <ClockCountdownIcon
                 size={40}
@@ -202,6 +204,7 @@ export function InboxPane(props: InboxPaneProps) {
               <div className="flex flex-1 items-center justify-center">
                 <Empty
                   size="sm"
+                  className="border-0 bg-transparent"
                   icon={<Loader size="lg" />}
                   title="正在恢复收件状态"
                   description="正在确认地址是否仍在有效期内。"
