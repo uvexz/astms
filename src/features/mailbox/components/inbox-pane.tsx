@@ -91,7 +91,7 @@ export function InboxPane(props: InboxPaneProps) {
       </div>
 
       {props.phase === 'idle' ? (
-        <div className="flex flex-1 items-center justify-center px-6 py-12">
+        <div className="flex flex-1 items-center justify-center px-6 py-12 lg:px-20">
           <Empty
             size="lg"
             icon={
@@ -148,7 +148,7 @@ export function InboxPane(props: InboxPaneProps) {
 
       {props.phase === 'active' ? (
         <>
-          <div className="flex items-start justify-between gap-4 px-6 pt-8 pb-4 sm:px-8 lg:px-10">
+          <div className="flex items-start justify-between gap-4 px-6 pt-8 pb-4 sm:px-8 lg:px-20 lg:pt-20">
             <div className="grid min-w-0 gap-1.5">
               <Text as="h2" variant="heading">
                 收件箱
@@ -177,7 +177,7 @@ export function InboxPane(props: InboxPaneProps) {
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col px-6 pb-8 sm:px-8 lg:px-10">
+          <div className="flex min-h-0 flex-1 flex-col px-6 pb-8 sm:px-8 lg:px-20">
             {!props.online ? (
               <Banner
                 className="mb-4"
@@ -229,9 +229,9 @@ export function InboxPane(props: InboxPaneProps) {
                 />
               </div>
             ) : (
-              <ul className="grid gap-2">
+              <ul className="flex min-w-0 flex-col gap-2">
                 {props.messages.map((message) => (
-                  <li key={message.id}>
+                  <li key={message.id} className="min-w-0">
                     <button
                       type="button"
                       onClick={() => props.onSelectMessage(message.id)}
@@ -286,7 +286,7 @@ function MessageDetail({
           aria-label="返回邮件列表"
           onClick={onBack}
         />
-        <div className="grid min-w-0 flex-1 gap-1.5">
+        <div className="grid min-w-0 flex-1 grid-cols-1 gap-1.5 break-words">
           <Text as="h2" variant="heading">
             {message.subject?.trim() || '无主题'}
           </Text>

@@ -61,15 +61,6 @@ export function CreateMailboxPane({
             {brand}
           </Text>
 
-          <div className="mt-2 grid gap-1.5">
-            <Text as="h1" variant="heading" size="lg">
-              临时收件箱
-            </Text>
-            <Text variant="secondary">
-              输入前缀或直接开始，页面保持在线期间接收邮件。
-            </Text>
-          </div>
-
           <form
             className="mt-6 grid gap-3"
             onSubmit={(event) => {
@@ -113,6 +104,7 @@ export function CreateMailboxPane({
 
             {isActive ? (
               <Button
+                key="stop"
                 type="button"
                 variant="secondary"
                 size="base"
@@ -124,6 +116,7 @@ export function CreateMailboxPane({
               </Button>
             ) : (
               <Button
+                key="start"
                 type="submit"
                 variant="primary"
                 size="base"
