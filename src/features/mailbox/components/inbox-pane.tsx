@@ -1,9 +1,7 @@
-import { useState } from 'react'
 import type { RefObject } from 'react'
 
 import {
   ArrowCounterClockwiseIcon,
-  ArrowLeftIcon,
   ClockCountdownIcon,
   EnvelopeSimpleIcon,
   WarningCircleIcon,
@@ -17,15 +15,11 @@ import { InlineCopyText } from '@cloudflare/kumo/components/inline-copy-text'
 import { Loader } from '@cloudflare/kumo/components/loader'
 import { Text } from '@cloudflare/kumo/components/text'
 
-import {
-  formatAbsoluteTime,
-  formatRemainingTime,
-  formatSender,
-  messagePreview,
-} from '../format'
+import { formatRemainingTime } from '../format'
 import type { MailboxMessageView, MailboxPhase } from '../types'
 import { MatrixRain } from './matrix-rain'
-import { HtmlMessageFrame, LinkifiedText } from './message-body'
+import { MessageDetail } from './message-detail'
+import { MessageList } from './message-list'
 
 type StatusVariant = 'success' | 'warning' | 'error' | 'info'
 
@@ -233,115 +227,14 @@ export function InboxPane(props: InboxPaneProps) {
                 />
               </div>
             ) : (
-              <ul className="flex min-w-0 flex-col gap-2">
-                {props.messages.map((message) => (
-                  <li key={message.id} className="min-w-0">
-                    <button
-                      type="button"
-                      onClick={() => props.onSelectMessage(message.id)}
-                      className="w-full rounded-lg bg-kumo-base px-5 py-4 text-left ring ring-kumo-line hover:bg-kumo-tint focus-visible:ring-2 focus-visible:ring-kumo-brand focus-visible:outline-none"
-                    >
-                      <span className="flex items-baseline justify-between gap-4">
-                        <Text as="span" bold truncate>
-                          {message.subject?.trim() || '无主题'}
-                        </Text>
-                        <span className="shrink-0">
-                          <Text as="span" variant="secondary">
-                            {formatAbsoluteTime(message.receivedAt)}
-                          </Text>
-                        </span>
-                      </span>
-                      <span className="mt-1 block truncate">
-                        <Text as="span" variant="secondary">
-                          {formatSender(message.fromAddress)} ·{' '}
-                          {messagePreview(message)}
-                        </Text>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <MessageList
+                messages={props.messages}
+                onSelectMessage={props.onSelectMessage}
+              />
             )}
           </div>
         </>
       ) : null}
     </section>
-  )
-}
-
-function MessageDetail({
-  message,
-  onBack,
-}: {
-  message: MailboxMessageView
-  onBack: () => void
-}) {
-  const [view, setView] = useState<'text' | 'html'>(
-    message.textBody || !message.htmlBody ? 'text' : 'html',
-  )
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-start gap-3">
-        <Button
-          variant="ghost"
-          shape="square"
-          icon={<ArrowLeftIcon size={16} />}
-          aria-label="返回邮件列表"
-          onClick={onBack}
-        />
-        <div className="grid min-w-0 flex-1 grid-cols-1 gap-1.5 break-words">
-          <Text as="h2" variant="heading">
-            {message.subject?.trim() || '无主题'}
-          </Text>
-          <div className="break-words">
-            <Text variant="secondary">
-              {message.fromAddress?.trim() || '未知发件人'} ·{' '}
-              <time dateTime={message.receivedAt}>
-                {formatAbsoluteTime(message.receivedAt)}
-              </time>
-            </Text>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-        <div role="group" aria-label="正文格式" className="flex gap-1">
-          {message.textBody ? (
-            <Button
-              variant={view === 'text' ? 'secondary' : 'ghost'}
-              aria-pressed={view === 'text'}
-              onClick={() => setView('text')}
-            >
-              纯文本
-            </Button>
-          ) : null}
-          {message.htmlBody ? (
-            <Button
-              variant={view === 'html' ? 'secondary' : 'ghost'}
-              aria-pressed={view === 'html'}
-              onClick={() => setView('html')}
-            >
-              HTML
-            </Button>
-          ) : null}
-        </div>
-        <Text variant="secondary">
-          {view === 'html'
-            ? 'HTML 已净化，远程图片默认阻止加载'
-            : '文本中的链接会在新标签页打开'}
-        </Text>
-      </div>
-
-      <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-lg bg-kumo-base p-5 ring ring-kumo-line">
-        {view === 'html' && message.htmlBody ? (
-          <HtmlMessageFrame html={message.htmlBody} />
-        ) : message.textBody ? (
-          <LinkifiedText text={message.textBody} />
-        ) : (
-          <Text variant="secondary">此邮件没有可显示的正文。</Text>
-        )}
-      </div>
-    </div>
   )
 }

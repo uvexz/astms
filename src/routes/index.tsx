@@ -4,6 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useKumoToastManager } from '@cloudflare/kumo/components/toast'
 
+import { getViewer } from '#/features/auth/auth-functions'
+import { AuthEntry } from '#/features/auth/components/auth-entry'
+import { LoginDialog } from '#/features/auth/components/login-dialog'
 import { validatePrefix } from '#/features/mailbox/address'
 import { CreateMailboxPane } from '#/features/mailbox/components/create-mailbox-pane'
 import { InboxPane } from '#/features/mailbox/components/inbox-pane'
@@ -17,21 +20,55 @@ import type {
   MailboxSnapshotResult,
 } from '#/features/mailbox/types'
 import { useBrowserAvailability } from '#/features/mailbox/use-browser-availability'
+import { useCopyAddress } from '#/features/mailbox/use-copy-address'
 import { useCountdown } from '#/features/mailbox/use-countdown'
 import { useUnreadTitle } from '#/features/mailbox/use-unread-title'
 
 const SESSION_STORAGE_KEY = 'astms.current-mailbox'
 
 export const Route = createFileRoute('/')({
-  loader: () => getMailboxPublicConfig(),
+  validateSearch: (search: Record<string, unknown>) => {
+    const result: {
+      login?: true
+      error?: string
+      error_description?: string
+    } = {}
+
+    if (
+      search.login === '1' ||
+      search.login === '"1"' ||
+      search.login === 'true' ||
+      search.login === true
+    ) {
+      result.login = true
+    }
+
+    if (typeof search.error === 'string') {
+      result.error = search.error
+    }
+
+    if (typeof search.error_description === 'string') {
+      result.error_description = search.error_description
+    }
+
+    return result
+  },
+  loader: async () => {
+    const [config, viewer] = await Promise.all([
+      getMailboxPublicConfig(),
+      getViewer(),
+    ])
+
+    return { config, viewer }
+  },
   head: ({ loaderData }) => ({
     meta: [
       {
-        title: `${loaderData?.siteName ?? 'ASTMS'} — 临时邮箱`,
+        title: `${loaderData?.config.siteName ?? 'ASTMS'} — 临时邮箱`,
       },
       {
         name: 'description',
-        content: `${loaderData?.siteName ?? 'ASTMS'} 是一个无需注册的临时邮箱服务。创建一个临时地址，在线期间接收邮件，离开后自动失效。`,
+        content: `${loaderData?.config.siteName ?? 'ASTMS'} 是一个无需注册的临时邮箱服务。创建一个临时地址，在线期间接收邮件，离开后自动失效。`,
       },
     ],
   }),
@@ -46,12 +83,17 @@ export const Route = createFileRoute('/')({
 })
 
 function HomePage() {
-  const config = Route.useLoaderData()
+  const { config, viewer } = Route.useLoaderData()
+  const search = Route.useSearch()
+  const navigate = Route.useNavigate()
   const queryClient = useQueryClient()
   const toastManager = useKumoToastManager()
+  const copyAddress = useCopyAddress()
   const { online, visible } = useBrowserAvailability()
   const inputRef = useRef<HTMLInputElement>(null)
   const inboxRef = useRef<HTMLElement>(null)
+  const lastAuthErrorRef = useRef<string | null>(null)
+  const loginOpen = search.login === true
 
   const [phase, setPhase] = useState<MailboxPhase>('idle')
   const [address, setAddress] = useState<string | null>(null)
@@ -70,6 +112,51 @@ function HomePage() {
   const restoredPendingRef = useRef(false)
   const previousMessageCountRef = useRef(0)
   const hasLoadedSnapshotRef = useRef(false)
+
+  function setLoginOpen(open: boolean) {
+    const nextLogin = open ? true : undefined
+
+    if (
+      search.login === nextLogin &&
+      !search.error &&
+      !search.error_description
+    ) {
+      return
+    }
+
+    navigate({
+      search: open ? { login: true } : {},
+      replace: true,
+    })
+  }
+
+  useEffect(() => {
+    if (viewer.user && loginOpen) {
+      navigate({ to: '/dashboard', replace: true })
+    }
+  }, [loginOpen, navigate, viewer.user])
+
+  useEffect(() => {
+    if (!search.error) {
+      return
+    }
+
+    const key = `${search.error}:${search.error_description ?? ''}`
+
+    if (lastAuthErrorRef.current === key) {
+      return
+    }
+
+    lastAuthErrorRef.current = key
+    toastManager.add({
+      variant: search.error === 'access_denied' ? 'warning' : 'error',
+      title:
+        search.error === 'access_denied'
+          ? '登录已取消'
+          : '登录失败，请稍后再试',
+    })
+    navigate({ search: { login: true }, replace: true })
+  }, [navigate, search.error, search.error_description, toastManager])
 
   useEffect(() => {
     let stored: string | null = null
@@ -163,23 +250,6 @@ function HomePage() {
     hasLoadedSnapshotRef.current = true
   }, [address, snapshotQuery.data, queryClient])
 
-  async function copyAddressToClipboard(value: string) {
-    try {
-      await navigator.clipboard.writeText(value)
-      toastManager.add({
-        variant: 'success',
-        title: '邮箱地址已复制',
-        description: value,
-      })
-    } catch {
-      toastManager.add({
-        variant: 'warning',
-        title: '未能自动复制地址',
-        description: `请手动复制：${value}`,
-      })
-    }
-  }
-
   function scrollToInboxOnMobile() {
     if (window.matchMedia('(min-width: 1024px)').matches) {
       return
@@ -242,7 +312,7 @@ function HomePage() {
         // Refreshing will simply start from the idle state.
       }
 
-      void copyAddressToClipboard(result.address)
+      void copyAddress(result.address)
       scrollToInboxOnMobile()
     },
     onError: () => {
@@ -351,6 +421,14 @@ function HomePage() {
         remainingSeconds={remainingSeconds}
         paused={!online}
         inputRef={inputRef}
+        isLoggedIn={Boolean(viewer.user)}
+        topRightAction={
+          <AuthEntry
+            viewer={viewer.user}
+            onLoginClick={() => setLoginOpen(true)}
+            onDashboardClick={() => navigate({ to: '/dashboard' })}
+          />
+        }
       />
       <InboxPane
         sectionRef={inboxRef}
@@ -369,6 +447,15 @@ function HomePage() {
         onBackToList={() => setSelectedMessageId(null)}
         onRestart={handleRestart}
       />
+      {loginOpen ? (
+        <LoginDialog
+          open
+          onOpenChange={setLoginOpen}
+          providers={viewer.providers}
+          authReady={viewer.authReady}
+          emailPasswordLogin={viewer.emailPasswordLogin}
+        />
+      ) : null}
     </main>
   )
 }

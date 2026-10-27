@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiInternalCleanupRouteImport } from './routes/api/internal/cleanup'
 import { Route as ApiWebhooksMailtrapInboundRouteImport } from './routes/api/webhooks/mailtrap/inbound'
@@ -17,6 +18,11 @@ import { Route as ApiWebhooksMailtrapInboundRouteImport } from './routes/api/web
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
@@ -38,12 +44,14 @@ const ApiWebhooksMailtrapInboundRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/internal/cleanup': typeof ApiInternalCleanupRoute
   '/api/webhooks/mailtrap/inbound': typeof ApiWebhooksMailtrapInboundRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/internal/cleanup': typeof ApiInternalCleanupRoute
   '/api/webhooks/mailtrap/inbound': typeof ApiWebhooksMailtrapInboundRoute
@@ -51,6 +59,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/internal/cleanup': typeof ApiInternalCleanupRoute
   '/api/webhooks/mailtrap/inbound': typeof ApiWebhooksMailtrapInboundRoute
@@ -59,18 +68,21 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/dashboard'
     | '/api/auth/$'
     | '/api/internal/cleanup'
     | '/api/webhooks/mailtrap/inbound'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/dashboard'
     | '/api/auth/$'
     | '/api/internal/cleanup'
     | '/api/webhooks/mailtrap/inbound'
   id:
     | '__root__'
     | '/'
+    | '/dashboard'
     | '/api/auth/$'
     | '/api/internal/cleanup'
     | '/api/webhooks/mailtrap/inbound'
@@ -78,6 +90,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DashboardRoute: typeof DashboardRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiInternalCleanupRoute: typeof ApiInternalCleanupRoute
   ApiWebhooksMailtrapInboundRoute: typeof ApiWebhooksMailtrapInboundRoute
@@ -90,6 +103,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
@@ -118,6 +138,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DashboardRoute: DashboardRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiInternalCleanupRoute: ApiInternalCleanupRoute,
   ApiWebhooksMailtrapInboundRoute: ApiWebhooksMailtrapInboundRoute,

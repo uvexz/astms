@@ -16,6 +16,7 @@ import {
   cleanupExpiredMailboxes,
   createMailboxWithPrefix,
   createOrOpenMailbox,
+  MailboxAddressInUseError,
   readMailboxPeek,
   readMailboxSnapshot,
 } from './mailbox-service'
@@ -116,6 +117,13 @@ export const createMailbox = createServerFn({ method: 'POST' })
         pollIntervalMs: config.pollIntervalMs,
       }
     } catch (error) {
+      if (error instanceof MailboxAddressInUseError) {
+        return {
+          status: 'address_in_use',
+          message: '该地址暂不可用，请换一个前缀或稍后再试',
+        }
+      }
+
       if (error instanceof ServerConfigError) {
         console.error('[mailbox] create unavailable', error.variables.join(','))
         return {

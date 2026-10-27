@@ -2,7 +2,7 @@
 
 > ASTMS — A simple temporary mailbox service  
 > 日期：2026-10-27  
-> 状态：MVP 已落地并通过本地工程/浏览器验收；真实 Mailtrap 端到端待配置凭据
+> 状态：MVP 已落地并通过本地工程/浏览器验收；真实 Mailtrap 端到端待配置凭据；用户后台开发计划见第 15 节
 
 ## 1. 本期目标
 
@@ -54,8 +54,8 @@
 以下功能不进入本次实现：
 
 - 发件、回复、转发。
-- 注册、登录、用户中心。
-- 登录用户邮箱永久保留；登录功能落地时再将邮箱关联到用户并取消匿名 TTL。
+- 注册、登录、用户中心（不在 MVP；已由第 15 节排期，仅第三方登录、不做注册）。
+- 登录用户邮箱永久保留（不在 MVP；已由第 15 节排期）。
 - 管理员后台。
 - 多域名、多 Mailtrap Inbox、动态创建 Inbox。
 - 附件下载、原始 `.eml` 下载。
@@ -352,8 +352,8 @@ bun run build
 
 ## 12. 后续待办
 
-- 登录、注册与用户中心。
-- 登录用户邮箱永久保留，以及匿名邮箱认领/迁移到账号的规则。
+- 登录、注册与用户中心（已排期：见第 15 节；本期仅第三方登录，不做注册）。
+- 登录用户固定邮箱（已排期：见第 15 节）；匿名邮箱认领/迁移仍待设计。
 - 发件、回复、转发与域名发信配置。
 - 管理员后台、审计、滥用处理和服务状态监控。
 - 附件安全扫描与下载、原始邮件查看。
@@ -447,3 +447,629 @@ bun run build
 - **HTML 存储**：入库的 `html_body` 为服务器净化后的内容，不保留原始 HTML；纯文本正文原样保存。
 - **BETTER_AUTH_SECRET**：本地已生成占位 secret；生产部署前必须设置，否则 Better Auth 占位模块会报默认 secret 错误（匿名邮箱不使用它）。
 - **移动端真机/窄屏**：浏览器验收覆盖约 820px 单栏与 1172px 双栏，未在 375px 真机复测；布局使用 `grid-cols-1` + 流式宽度，无固定宽度。
+
+## 15. 用户后台开发计划（第三方登录 + 固定邮箱）
+
+> 规划日期：2026-10-27  
+> 状态：方案已确认，待实施  
+> 范围说明：本节覆盖原第 3 节中暂缓的登录与用户中心能力；匿名临时邮箱的既有行为和验收结论保持不变。
+
+### 15.1 本期目标
+
+1. 默认只允许第三方账号登录：GitHub、Google、SB.SB 论坛（标准 OIDC）；本地验收可通过 `EMAIL_PASS_LOGIN` 临时开启邮箱密码登录，默认关闭。
+2. 登录用户在独立后台 `/dashboard` 中最多保留 **50 个固定临时邮箱**。
+3. 固定邮箱长期保留、始终可收信（除非达到上限被淘汰）；创建第 51 个时自动淘汰最久未打开的邮箱。
+4. 固定邮箱仅登录者本人可读取；地址可以公开分享用于收信。
+5. 固定邮箱前缀最小 3 位，点号不影响投递：前缀 `abc` 也能收到发往 `a.b.c@domain` 的邮件。
+6. 首页左侧区域右上角放置登录入口，点击打开登录弹窗；登录成功进入 `/dashboard`。
+7. 匿名临时邮箱流程保持现状，与固定邮箱使用两套独立的生命周期和访问规则。
+
+### 15.2 已确认决策
+
+| 决策项           | 结论                                                                                                            |
+| ---------------- | --------------------------------------------------------------------------------------------------------------- |
+| 后台形态         | 独立 `/dashboard`，左侧固定邮箱列表 + 右侧收件箱                                                                |
+| 登录方式         | 默认仅 GitHub、Google、SB.SB；可用 `EMAIL_PASS_LOGIN` 显式开启邮箱密码登录（首次登录自动注册），默认关闭        |
+| 首页入口         | 左侧面板右上角；未登录显示“登录”，已登录显示头像 + “进入后台”                                                   |
+| 登录交互         | 首页内 Kumo Dialog；默认列出三个提供方，开启 `EMAIL_PASS_LOGIN` 时额外显示邮箱密码表单；成功后进入 `/dashboard` |
+| 固定邮箱上限     | 每用户最多 50 个；满额新建时自动淘汰最久未打开的邮箱                                                            |
+| 固定邮箱生命周期 | 永久保留，除非用户手动删除或被上限淘汰；不再有过期倒计时                                                        |
+| 固定邮箱访问     | 仅本人登录态可读；仅知道地址不能查看                                                                            |
+| 点号规则         | 仅固定邮箱忽略点号；匿名邮箱保持严格地址匹配                                                                    |
+| 固定邮箱前缀     | 最小 3 位、最大 32 位；点号在规范化时移除                                                                       |
+| 匿名邮箱前缀     | 维持现有 6–32 位、禁止点号                                                                                      |
+| 地址冲突         | 登录用户创建固定邮箱时，如果地址正被匿名邮箱占用，拒绝创建并提示                                                |
+| 账号合并         | 始终不合并；同一自然人在不同 provider 下是不同用户                                                              |
+| SB.SB email      | 不申请 `email` scope；使用 `sub` 生成内部占位邮箱，界面不展示                                                   |
+
+### 15.3 认证方案（Better Auth）
+
+#### 15.3.1 基础配置
+
+- 复用已安装的 `better-auth`（当前解析版本 1.7.14；实施前锁定版本并核对 API）。
+- 使用 `drizzleAdapter(db, { provider: 'sqlite', schema })`，与现有 libSQL/Turso 数据库共用。
+- `emailAndPassword.enabled` 默认 false；仅当 `EMAIL_PASS_LOGIN=1|true` 时开启邮箱密码登录（首次登录自动注册，无邮箱验证/找回密码）。
+- `account.accountLinking.enabled: false`，不做跨 provider 账号合并。
+- `account.encryptOAuthTokens: true`，加密数据库中的 OAuth access/refresh/id token。
+- `advanced.ipAddress.disableIpTracking: true`，会话表不保存 IP。
+- `tanstackStartCookies()` 必须是最后一个插件。
+- `getAuth()` 只放在 `src/lib/auth.ts`；`getRequestHeaders()`、`getAuth()`、数据库读取等 server-only 逻辑放在 `auth-server.ts`，客户端只通过 `createServerFn` RPC 调用。
+- 认证配置拆成纯函数 `createAuthOptions()` + 懒加载单例 `getAuth()`：
+  - 缺少认证环境变量时，匿名首页仍可正常使用；
+  - `/api/auth/*` 或登录按钮才返回“登录暂未开放”；
+  - auth schema 已按 Better Auth 1.7.14 的 `getAuthTables` 手动落地；后续升级时用 CLI 生成并比对。
+
+示意配置：
+
+```ts
+const baseURL = process.env.BETTER_AUTH_URL
+
+export const authOptions = {
+  baseURL,
+  secret: process.env.BETTER_AUTH_SECRET,
+  database: drizzleAdapter(db, { provider: 'sqlite', schema }),
+  emailAndPassword: { enabled: isEmailPasswordLoginEnabled() },
+  account: {
+    accountLinking: { enabled: false },
+    encryptOAuthTokens: true,
+  },
+  advanced: { ipAddress: { disableIpTracking: true } },
+  socialProviders: {
+    github: {/* 仅当 GITHUB_* 成对存在时注册 */},
+    google: {/* 仅当 GOOGLE_* 成对存在时注册 */},
+  },
+  plugins: [
+    genericOAuth({ config: [sbConfig] }), // 仅当 SB_OIDC_* 配置完整时注册
+    tanstackStartCookies(), // 必须最后
+  ],
+}
+```
+
+#### 15.3.2 Provider 与回调地址
+
+| Provider | Better Auth providerId | Scope                           | 回调路径                    |
+| -------- | ---------------------- | ------------------------------- | --------------------------- |
+| GitHub   | `github`               | Better Auth 默认                | `/api/auth/callback/github` |
+| Google   | `google`               | Better Auth 默认                | `/api/auth/callback/google` |
+| SB.SB    | `sb`                   | `openid profile offline_access` | `/api/auth/callback/sb`     |
+
+生产环境回调地址：
+
+- `https://vip.co.fo/api/auth/callback/github`
+- `https://vip.co.fo/api/auth/callback/google`
+- `https://vip.co.fo/api/auth/callback/sb`（用户已提供）
+
+#### 15.3.3 SB.SB OIDC 接入
+
+使用 Better Auth `genericOAuth` 插件，配置：
+
+```ts
+{
+  providerId: 'sb',
+  name: 'SB.SB',
+  discoveryUrl: 'https://sb.sb/oidc/.well-known/openid-configuration',
+  clientId: process.env.SB_OIDC_CLIENT_ID!,
+  clientSecret: process.env.SB_OIDC_CLIENT_SECRET!,
+  scopes: ['openid', 'profile', 'offline_access'],
+  redirectURI: `${baseURL}/api/auth/callback/sb`,
+  pkce: true,          // S256
+  responseType: 'code',
+  disableProviderLogout: true, // 退出 ASTMS 不连带退出论坛
+  mapProfileToUser: (profile) => ({
+    // sub 可能包含邮箱 local part 不允许的字符，统一哈希后再拼接
+    email: `sb-${sha256Hex(profile.sub).slice(0, 32)}@oauth.invalid`,
+    emailVerified: false,
+    name: profile.name ?? profile.preferred_username ?? 'SB.SB 用户',
+    image: profile.picture,
+  }),
+}
+```
+
+已知端点（用于排查，正常走 discovery）：
+
+- issuer：`https://sb.sb/oidc`
+- authorization：`https://sb.sb/oidc/authorize`
+- token：`https://sb.sb/oidc/token`
+- userinfo：`https://sb.sb/oidc/userinfo`
+- logout：`https://sb.sb/oidc/logout`
+- jwks：`https://sb.sb/oidc/keys`
+- introspection：`https://sb.sb/oidc/introspect`
+
+说明：
+
+- 按已确认决策不申请 `email` scope；Better Auth 要求 user 表有 email，因此用稳定的 `sub` 生成内部占位邮箱。
+- 占位邮箱使用保留域 `.invalid`，不展示在界面，也不用于发信。
+- 如果 SB.SB 的 userinfo 缺少 `sub`，登录失败关闭，不做猜测性回退。
+- 当前按推荐 scope 请求 `offline_access`；本期登录后不调用论坛 API，refresh token 仅由 Better Auth 加密保存。若不需要，可在实施时去掉该 scope 以缩小令牌面。
+
+#### 15.3.4 占位邮箱与“不合并”规则
+
+三个 provider 都把 user 表 email 映射为内部唯一值。账号主体先做 SHA-256，取 32 位十六进制，避免 OIDC `sub` 中出现 `|`、`:` 等非法邮箱字符：
+
+| Provider | 内部 email                                            |
+| -------- | ----------------------------------------------------- |
+| GitHub   | `github-<sha256(profile.id) 前 32 位>@oauth.invalid`  |
+| Google   | `google-<sha256(profile.sub) 前 32 位>@oauth.invalid` |
+| SB.SB    | `sb-<sha256(profile.sub) 前 32 位>@oauth.invalid`     |
+
+- `emailVerified` 均为 `false`；不把真实第三方邮箱写入 user 表。
+- 这样即使 GitHub 与 Google 返回同一个真实邮箱，也会创建两个独立用户，符合“始终不合并”。
+- 优点：不会触发 Better Auth 的 `account not linked` 错误，也不会跨平台串号。
+- 三个 provider 的映射都必须保证 `name` 非空：依次使用 `name`、用户名/`preferred_username`、固定文案；`image` 使用 provider 头像。
+- 账号主体缺失或无法生成合法占位邮箱时登录失败关闭，不做猜测性回退。
+- 可选开启 `overrideUserInfoOnSignIn: true`，每次登录刷新昵称/头像；不会改变内部占位邮箱。
+- 界面只展示 `name` 和头像，不展示内部占位邮箱。
+
+#### 15.3.5 会话与退出
+
+- 继续使用现有 `/api/auth/$` catch-all 路由；改为懒加载 `getAuth()`，返回 `Cache-Control: no-store`。
+- 会话 cookie 使用 Better Auth 默认安全属性：HttpOnly、SameSite=Lax、生产 Secure；不得改成 SameSite=Strict，否则 OAuth 回调会丢失 state cookie。
+- 首期沿用 Better Auth 默认会话时长（7 天，活跃自动续期）；不额外配置长期会话。
+- GitHub / Google / SB.SB 退出都只清理 ASTMS 本地会话；SB.SB 通过 `disableProviderLogout: true` 避免连带退出论坛。
+- 会话过期或缺失时：
+  - `/dashboard` 的 `beforeLoad` 重定向到 `/?login=true`；
+  - 后端 Server Function 返回 `unauthenticated`，前端提示“登录已过期，请重新登录”。
+
+### 15.4 数据模型变更
+
+#### 15.4.1 Better Auth 表
+
+按 Better Auth 1.7.14 的 `getAuthTables` 落地并审查以下表（单数表名、snake_case 列名；后续可用 CLI 复核）：
+
+- `user`：id、name、email（唯一，内部占位）、emailVerified、image、createdAt、updatedAt。
+- `session`：id、expiresAt、token、createdAt、updatedAt、ipAddress、userAgent、userId。
+- `account`：id、accountId、providerId、userId、accessToken、refreshToken、idToken、过期时间、scope、createdAt、updatedAt。
+- `verification`：当前无邮件验证流程，但保留生成表以兼容 Better Auth。
+
+Drizzle 侧：
+
+- 生成 `src/db/auth-schema.ts`，在 `src/db/schema.ts` 中 re-export，确保 `drizzle-kit` 能发现。
+- `drizzleAdapter` 传入包含 auth 表的 `schema`。
+- 重新运行 `bun run db:generate` 生成迁移，逐条审查 SQL。
+
+#### 15.4.2 `mailboxes` 调整
+
+| 字段           | 变更                                                                                                       |
+| -------------- | ---------------------------------------------------------------------------------------------------------- |
+| `user_id`      | 新增，text，可空，外键 `user.id`，`on delete cascade`                                                      |
+| `expires_at`   | 保持 NOT NULL；固定邮箱写入远期哨兵 `FIXED_MAILBOX_EXPIRES_AT`（9999-12-31），避免 SQLite 改可空触发表重建 |
+| `last_seen_at` | 保留；固定邮箱每次打开收件箱时更新，用于 LRU 淘汰                                                          |
+| `ended_at`     | 保留给匿名邮箱；固定邮箱删除时直接硬删除                                                                   |
+
+新增索引：
+
+- `(user_id, ended_at)`：后台列表与归属查询。
+- 现有 `ended_at IS NULL` 的 `address` 部分唯一索引继续覆盖匿名和固定邮箱，保证同一时刻全局地址唯一。
+
+数据不变量：
+
+- 匿名邮箱：`user_id IS NULL`，`expires_at` 为真实 TTL。
+- 固定邮箱：`user_id IS NOT NULL`，`expires_at = FIXED_MAILBOX_EXPIRES_AT`，`ended_at IS NULL`。
+- 所有匿名查询/清理必须显式过滤 `user_id IS NULL`，不能只依赖 `expires_at`。
+- 地址活跃期间全局唯一，不区分匿名/固定。
+- 删除固定邮箱时硬删除 `mailboxes` 行，`messages` 通过外键级联删除。
+
+#### 15.4.3 迁移与兼容
+
+- 新增迁移文件（`0001_*.sql`）只创建 auth 表、给 `mailboxes` 增加 `user_id` 与索引，不做表重建，风险较低。
+- 仍需：
+  1. 复制现有 `local.db` 做迁移演练；
+  2. 确认现有匿名邮箱记录与邮件不丢失；
+  3. Turso 生产迁移前先备份；
+  4. 迁移后跑一遍匿名创建、轮询、过期、Webhook 测试。
+- 固定邮箱使用远期 `expires_at` 哨兵，任何匿名读取/清理逻辑都必须显式过滤 `user_id IS NULL`；测试需覆盖“固定邮箱不会被匿名 TTL 逻辑过期或删除”。
+
+### 15.5 地址规则与收件匹配
+
+#### 15.5.1 固定邮箱前缀
+
+规范化顺序：
+
+1. trim、转小写；
+2. 移除所有 `.`；
+3. 校验长度 3–32；
+4. 只允许 `a-z0-9-`，且必须以字母或数字开头和结尾。
+
+示例：
+
+| 输入      | 规范化结果 | 结果              |
+| --------- | ---------- | ----------------- |
+| `a.b.c`   | `abc`      | 合法              |
+| `A.B.C`   | `abc`      | 合法              |
+| `a.b`     | `ab`       | 拒绝（不足 3 位） |
+| `.abc.`   | `abc`      | 合法              |
+| `a..b..c` | `abc`      | 合法              |
+| `ab-c`    | `ab-c`     | 合法              |
+| `ab`      | `ab`       | 拒绝              |
+| `a_b`     | `a_b`      | 拒绝（非法字符）  |
+
+UI 在输入含点号时显示预览：“将创建 abc@domain”。匿名邮箱仍使用现有 6–32 位、禁止点号的规则。
+
+#### 15.5.2 收件匹配矩阵
+
+Webhook 收到收件人后：
+
+- 匿名邮箱：使用规范化后的完整地址严格匹配，且必须未结束、未过期。
+- 固定邮箱：移除收件地址 local part 中的所有点号，再与固定邮箱的 canonical 地址匹配，不检查 TTL。
+
+| 收件地址       | 匿名 `abc@domain` | 固定 `abc@domain`     |
+| -------------- | ----------------- | --------------------- |
+| `abc@domain`   | 命中              | 命中                  |
+| `a.b.c@domain` | 不命中            | 命中                  |
+| `ab.c@domain`  | 不命中            | 命中（规范化为 abc）  |
+| `A.B.C@domain` | 不命中            | 命中                  |
+| `a.b@domain`   | 不命中            | 不命中（规范化为 ab） |
+
+实现要点：
+
+- 新增 `canonicalizeFixedAddress(address)`：只移除 local part 的点号，不动域名。
+- Webhook 同时查两组：
+  - 匿名：`address IN (原始收件地址)` + `user_id IS NULL` + `ended_at IS NULL` + `expires_at > now`；
+  - 固定：`address IN (去点后的收件地址)` + `user_id IS NOT NULL` + `ended_at IS NULL`。
+- 合并结果按 mailbox id 去重；同一封邮件可落入多个邮箱。
+- 固定邮箱不要求用户在线：Webhook 始终入库，用户下次打开后台即可看到。
+- 已删除/被淘汰的固定邮箱不匹配，邮件按无匹配地址忽略。
+
+#### 15.5.3 创建冲突规则
+
+| 目标地址当前状态       | 固定邮箱创建结果                             |
+| ---------------------- | -------------------------------------------- |
+| 当前用户自己的固定邮箱 | 直接打开现有邮箱，不新建、不淘汰             |
+| 其他用户的固定邮箱     | 拒绝：地址暂不可用                           |
+| 活跃的匿名邮箱         | 拒绝：地址暂不可用（不抢占、不拦截他人邮件） |
+| 已过期的匿名邮箱       | 先结束该匿名记录，再创建固定邮箱             |
+| 无活跃记录             | 创建固定邮箱                                 |
+
+并发时由 `ended_at IS NULL` 的地址唯一索引兜底；冲突后重新查询归属并返回明确状态。
+
+随机前缀（用户留空）使用“只新建、不打开已有”的语义：生成的前缀命中任何已有邮箱（包括自己的）时重试；只有显式输入前缀时才允许打开自己的同地址固定邮箱。
+
+#### 15.5.4 50 个上限与 LRU 淘汰
+
+- 所有创建、计数、淘汰、插入在同一个写事务中完成。
+- 创建第 51 个时：
+  1. 先确认目标地址可用；
+  2. 选择当前用户 `last_seen_at` 最早、其次 `created_at` 最早的固定邮箱；
+  3. 硬删除该邮箱及其邮件；
+  4. 插入新邮箱；
+  5. 返回 `evictedAddress` 供前端提示。
+- 地址不可用时不淘汰任何邮箱。
+- 用户打开某个固定邮箱时更新 `last_seen_at`；仅浏览列表不更新，避免所有邮箱同时变成“最近使用”。
+- 后台列表按 `created_at DESC` 稳定排序，避免轮询时列表跳动；LRU 只用于淘汰。
+- 页面必须明确提示满额自动淘汰规则，并在淘汰发生后显示具体地址的 Toast。
+
+### 15.6 服务端接口
+
+#### 15.6.1 认证
+
+新增 `src/features/auth/auth-functions.ts`（仅 `createServerFn` 包装）+ `src/features/auth/auth-server.ts`（server-only 逻辑）：
+
+- `getViewer`（GET）
+  - 返回 `{ user: { id, name, image, provider } | null, authReady, providers, emailPasswordLogin }`。
+  - `providers` 只包含已配置的 GitHub/Google/SB.SB 布尔值。
+  - 认证配置缺失或会话查询失败时返回未登录状态，不让首页 loader 崩溃。
+- 内部 `requireViewer()` 放在 `auth-server.ts`，供其他 Server Function 复用，统一从 `getRequestHeaders()` 读取会话。
+- `src/routes/api/auth/$.ts` 对 `sign-in/email`、`sign-up/email`、`sign-in/social` 分别做 10/5/10 次每分钟的进程内 IP 限流（`auth-rate-limit.ts`）。
+- 不向客户端返回真实/占位 email、access token 或 user agent。
+
+#### 15.6.2 固定邮箱
+
+新增 `src/features/mailbox/owned-mailbox-service.ts` + `owned-mailbox-functions.ts`：
+
+- `listMyMailboxes`
+  - 返回当前用户全部固定邮箱摘要：id、address、createdAt、lastSeenAt。
+  - 最多 50 条，按 `created_at DESC`。
+- `createMyMailbox({ prefix? })`
+  - 校验固定前缀规则；空值使用现有随机姓名前缀生成器。
+  - 处理冲突、50 上限与 LRU 淘汰。
+  - 返回 `active | invalid_prefix | address_in_use | rate_limited | unauthenticated | unavailable`，成功时带 `mailbox`、`evictedAddress?`。
+- `getMyMailboxSnapshot({ mailboxId })`
+  - 必须登录且邮箱属于当前用户；不按地址查询。
+  - 更新 `last_seen_at`，返回最近 200 封邮件。
+  - 其他用户的 id 统一返回 `not_found`，不泄露存在性。
+- `deleteMyMailbox({ mailboxId })`
+  - 仅本人可删；硬删除并级联删除邮件。
+  - 返回 `deleted | not_found | unauthenticated`。
+- 创建与删除增加按用户 ID 的内存速率限制（建议 10 次/分钟/用户），与现有 IP 限流并存。
+
+`getMailboxPublicConfig` 继续提供域名、轮询间隔和匿名前缀规则；后台创建表单使用域名与 3 位固定前缀规则。
+
+#### 15.6.3 匿名邮箱回归
+
+以下函数必须加 `user_id IS NULL` 过滤，避免匿名访问面读到固定邮箱：
+
+- `readMailboxSnapshot`
+- `readMailboxPeek`
+- 匿名创建/打开地址的查询
+- 清理过期邮箱
+
+匿名创建遇到固定邮箱占用的地址时返回 `address_in_use`，不得返回固定邮箱的 `mailboxId` 或 `joinedExisting`。
+
+#### 15.6.4 Webhook 与清理
+
+- `handleMailtrapWebhook` 改为“匿名严格匹配 + 固定去点匹配”两组查询，按上节规则合并去重。
+- 固定邮箱不检查在线状态和 TTL；匿名邮箱继续检查 `expires_at > now`。
+- 保持现有 `event_id` 幂等、`(mailbox_id, mailtrap_message_id)` 唯一约束和事务语义。
+- 清理任务只结束/删除匿名邮箱；固定邮箱永不参与 TTL 清理。
+- 可在清理任务中顺带删除过期 Better Auth 会话（可选，不影响固定邮箱）。
+
+### 15.7 前端设计
+
+#### 15.7.1 首页登录入口与弹窗
+
+- `CreateMailboxPane` 增加 `topRightAction` 插槽，在左侧面板右上角渲染登录入口；不改变现有居中表单结构。
+- 未登录：显示“登录”按钮（Kumo `Button` secondary/sm），点击打开 `LoginDialog`。
+- 已登录：显示头像 + “进入后台”；点击导航到 `/dashboard`。
+- 如果已登录且 URL 带 `login=true`，直接导航到 `/dashboard`，不展示 provider 选择，避免误建第二个账号。
+- 首页路由 `validateSearch` 支持 `login=true`、`error`、`error_description`，用于从 `/dashboard` 未登录重定向后自动打开弹窗并展示 OAuth 错误；关闭弹窗时清理 query。
+- `LoginDialog`：
+  - Kumo Dialog，标题“登录”，说明“使用第三方账号或邮箱密码登录，管理你的固定邮箱”。
+  - 只显示服务端已配置的 provider：GitHub、Google、SB.SB；每个按钮带图标与 loading 状态。
+  - `EMAIL_PASS_LOGIN` 开启时额外显示邮箱 + 密码表单；首次登录自动注册，密码 8–128 位，不提供找回密码。
+  - 点击调用 `authClient.signIn.social({ provider, callbackURL: '/dashboard', errorCallbackURL: '/?login=true' })`。
+  - 没有任何可用登录方式时显示 Banner：“登录暂未开放”。
+  - 错误 query（如 `access_denied`）在首页以 Toast 提示，并清理 URL。
+  - 错误只映射为固定中文文案（取消、网络失败、登录失败、暂未开放），不回显 provider 原始错误描述。
+  - 隐私提示：“仅用于登录；不保存第三方密码，不展示第三方邮箱。”开启邮箱密码时，密码仅用于本站登录。
+- 已登录用户在首页仍创建匿名邮箱；表单下方提示“首页创建的是临时地址，固定邮箱请在后台创建”。
+
+#### 15.7.2 `/dashboard` 页面
+
+路由与守卫：
+
+- 新增 `src/routes/dashboard.tsx`。
+- `beforeLoad` 调用 `getViewer`；未登录重定向到 `/?login=true`。
+- `validateSearch` 支持 `mailbox=<id>`，用于刷新/深链保持选中邮箱。
+- `loader` 并行获取 viewer、邮箱列表、公开配置；列表作为 TanStack Query 的 `initialData`。
+
+布局：
+
+- 桌面：`lg:grid lg:h-dvh lg:grid-cols-[minmax(280px,340px)_1fr]`，左侧 `bg-kumo-base`，右侧 `bg-kumo-recessed`。
+- 移动：单列，左侧列表与右侧收件箱各自 `min-h-dvh`；选择邮箱后滚动到收件箱。
+- 左栏：
+  - 顶部：品牌、用户头像/名称、返回首页与退出登录按钮（直接按钮，避免 Kumo DropdownMenu 的 MenuGroup 上下文限制）。
+  - 创建表单：Kumo `InputGroup`，固定 `@domain` 后缀，点号预览提示，按钮“创建固定邮箱”。
+  - 配额：`已用 N / 50` Badge；满额提示“新建会自动删除最久未打开的邮箱”。
+  - 邮箱列表：地址、创建时间/最近打开时间、复制按钮、删除按钮；选中项使用 ring/brand 状态。
+  - 底部隐私 Banner：“固定邮箱只有你能查看；地址可分享给任何人用于收信。”
+- 右栏：
+  - 未选择邮箱：Empty “创建或选择一个固定邮箱”。
+  - 已选择：地址 + “固定邮箱” Badge + 复制；状态 Badge（收件中/已暂停/重连中）；旁注“不会过期，满 50 个后新建会自动淘汰最久未打开的一个”。
+  - 邮件列表与详情复用现有 `MessageDetail` / 正文安全渲染逻辑。
+  - 空收件箱：Empty “等待邮件”，说明“邮件会一直保留，关闭页面也不会丢失”。
+  - 断网显示暂停 Banner；恢复后立即刷新。
+  - 选中邮箱被删除或淘汰时，提示并自动选择下一个；没有剩余邮箱则回到 Empty。
+- 删除确认：Kumo Dialog，明确“地址与全部邮件将立即删除，无法恢复”。
+- 创建成功：自动复制地址、选中新邮箱、Toast；如发生淘汰，追加 warning Toast 显示被删除地址。
+- 轮询：仅在选中邮箱、页面可见、浏览器在线时每 10 秒刷新；隐藏页面停止轮询，但邮件仍由 Webhook 入库。
+
+#### 15.7.3 组件与文件规划
+
+```text
+src/features/auth/
+  auth-functions.ts       # 仅 createServerFn 包装
+  auth-server.ts          # server-only：session、provider、requireViewer
+  auth-rate-limit.ts      # 认证入口 IP 限流
+  auth-providers.ts
+  components/login-dialog.tsx
+  components/auth-entry.tsx
+
+src/features/mailbox/
+  owned-mailbox-service.ts
+  owned-mailbox-functions.ts
+  components/dashboard-sidebar.tsx
+  components/dashboard-inbox-pane.tsx
+  components/create-fixed-mailbox-form.tsx
+  components/message-list.tsx      # 从 inbox-pane 抽出
+  components/message-detail.tsx    # 从 inbox-pane 抽出
+
+src/routes/dashboard.tsx
+src/db/auth-schema.ts              # 按 getAuthTables 落地，可用 CLI 复核
+```
+
+- 抽取 `MessageList` / `MessageDetail`，匿名收件箱和固定收件箱共用，避免复制正文安全逻辑。
+- 复用 `MessageBody`、`formatAbsoluteTime`、`formatSender`、`messagePreview`。
+- 删除未使用的 `src/integrations/better-auth/header-user.tsx` 占位组件，避免旧的 email/password 逻辑残留。
+- Kumo UI 约束保持不变：内容 14px、标题 heading、语义 token、ring surface、无 raw color、不使用 `tracking-*`/`font-bold`。
+- 时间显示统一使用 `Asia/Shanghai`，避免 SSR 与客户端时区不同导致 hydration mismatch。
+- 对话框、按钮、Badge、Empty、Banner、InlineCopyText、Loader 均使用 Kumo 默认组件；实现前先查 registry 确认 Dialog/Dropdown API。
+- 可访问性：对话框焦点管理、列表项独立复制/删除按钮的 aria-label、aria-live 新邮件播报、键盘操作、`prefers-reduced-motion`。
+
+### 15.8 安全与隐私
+
+- **归属鉴权**：所有固定邮箱操作只接受会话中的 userId；不接收客户端传入的 userId。按 mailboxId 查询时校验归属，其他用户统一 `not_found`。
+- **匿名面隔离**：匿名快照/peek/创建必须过滤 `user_id IS NULL`；固定邮箱不能通过“知道地址”读取。
+- **默认无密码面**：默认不启用 email/password；只有显式设置 `EMAIL_PASS_LOGIN=1|true` 才显示邮箱密码登录，且无邮箱验证/找回密码。生产默认保持关闭。
+- **服务端隔离**：`getViewer` 只通过 `createServerFn` RPC 暴露；`getRequestHeaders`、`getAuth`、数据库读取放在 `auth-server.ts`，避免客户端 bundle 引入服务端模块。
+- **认证限流**：`/api/auth` 的邮箱登录、注册、三方登录入口按 IP 限流；与匿名创建、固定邮箱操作的内存限流一致。
+- **账号隔离**：三个 provider 使用内部占位邮箱，同一真实邮箱不会合并账号。
+- **令牌保护**：OAuth token 加密存储；不写入浏览器 localStorage；服务端日志不记录 token、secret、完整邮件正文。
+- **Cookie/CSRF**：HttpOnly + SameSite=Lax + 生产 Secure；OAuth state + PKCE；Server Function 继续使用现有 Origin 校验。
+- **速率限制**：匿名创建按 IP；固定邮箱创建/删除按用户；认证入口按 IP（10/5/10 次每分钟）。
+- **会话切换**：退出登录或检测到 `unauthenticated` 时，清空 TanStack Query 的 `my-mailboxes` / `my-mailbox-snapshot` 缓存与选中状态，避免同一浏览器切换账号后短暂看到上一个用户的数据。
+- **头像资源**：头像来自第三方域名；如果后续收紧 CSP，需要为 GitHub/Google/SB.SB 头像域添加 `img-src`，或改为首字母头像。
+- **破坏性操作**：50 上限自动淘汰、手动删除都必须有明确文案；淘汰后 Toast 显示被删地址。
+- **隐私文案**：登录弹窗说明只保存第三方公开资料；后台 Banner 说明固定邮箱仅本人可读；匿名 Banner 保持不变。
+- **数据留存**：固定邮箱与邮件永久保留至删除/淘汰；首期邮件列表最多返回最近 200 封，避免单次响应过大，界面需标注上限。
+- **不做匿名认领**：匿名邮箱不能在登录后“认领”为固定邮箱，避免地址归属与历史邮件泄露争议。
+
+### 15.9 环境变量与部署
+
+#### 15.9.1 新增环境变量
+
+```dotenv
+# Better Auth
+BETTER_AUTH_URL=https://vip.co.fo
+BETTER_AUTH_SECRET=
+BETTER_AUTH_TRUSTED_ORIGINS=
+
+# 默认关闭；本地验收/明确需要时设为 1 或 true
+EMAIL_PASS_LOGIN=0
+
+# GitHub OAuth
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+
+# Google OAuth
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+# SB.SB OIDC
+SB_OIDC_CLIENT_ID=
+SB_OIDC_CLIENT_SECRET=
+SB_OIDC_ISSUER=https://sb.sb/oidc
+
+# 可选覆盖，默认 `${BETTER_AUTH_URL}/api/auth/callback/sb`
+SB_OIDC_REDIRECT_URI=
+# 可选覆盖，默认 openid profile offline_access
+SB_OIDC_SCOPES=
+```
+
+- `BETTER_AUTH_URL` 必须与用户实际访问的站点 origin 完全一致；生产为 `https://vip.co.fo`。
+- `BETTER_AUTH_SECRET` 生产使用 ≥32 字节随机值；不得使用本地占位值。
+- `EMAIL_PASS_LOGIN` 默认关闭；生产不建议开启，除非明确需要。开启后首次登录自动注册，没有邮箱验证与找回密码。
+- provider 变量按需配置：只配置一组时，登录弹窗只显示该 provider；全部缺失且未开启邮箱密码时显示“登录暂未开放”，匿名首页不受影响。
+- `.env.example` 写入变量名与非敏感示例；真实值只放 `.env.local` 或部署平台 Secret。
+
+#### 15.9.2 OAuth 应用注册
+
+| Provider | 生产回调                                     | 本地开发回调                                     |
+| -------- | -------------------------------------------- | ------------------------------------------------ |
+| GitHub   | `https://vip.co.fo/api/auth/callback/github` | `http://localhost:3000/api/auth/callback/github` |
+| Google   | `https://vip.co.fo/api/auth/callback/google` | `http://localhost:3000/api/auth/callback/google` |
+| SB.SB    | `https://vip.co.fo/api/auth/callback/sb`     | 需单独注册或使用 HTTPS tunnel                    |
+
+- GitHub 需创建 OAuth App；Google 需创建 OAuth Client 并配置同意屏幕；SB.SB 需创建 OIDC 客户端并登记回调。
+- Google 生产环境可能涉及 OAuth 同意屏幕验证与域名配置，需预留审核时间。
+
+SB.SB 本地联调是实施前置条件：当前只拿到生产回调 `https://vip.co.fo/api/auth/callback/sb`。如果论坛不允许注册 localhost 回调，需要：
+
+- 为开发环境单独创建一个 SB.SB OIDC 客户端；或
+- 使用指向本机的 HTTPS tunnel，并把 tunnel 域名注册为回调。
+
+#### 15.9.3 迁移与发布步骤
+
+1. 备份 Turso 数据库。
+2. 生成并审查 Better Auth + mailboxes 迁移。
+3. 在 Turso 执行 `bun run db:migrate`。
+4. 配置 `BETTER_AUTH_*`、三个 provider 的 client id/secret；生产确认 `EMAIL_PASS_LOGIN` 未开启。
+5. 部署并验证：
+   - `/api/auth/callback/sb` 可被 SB.SB 回调；
+   - Set-Cookie 含 HttpOnly/Secure/SameSite=Lax；
+   - 登录后 `/dashboard` 可访问，退出后回到首页；
+   - 固定邮箱收发与点号匹配正常；
+   - 认证入口限流生效，邮箱密码登录仅在显式开启时出现。
+6. 更新 `.env.example`、`README.md`、`DEPLOY.md` 的用户后台章节。
+7. 定时清理任务继续只处理匿名邮箱；可顺带清理过期 session。
+
+### 15.10 实施顺序
+
+#### 阶段 1：认证基础
+
+- 锁定 Better Auth 版本，生成并接入 auth schema。
+- 实现 `createAuthOptions()`、懒加载 `getAuth()`、provider 可用性判断。
+- 配置 GitHub / Google / SB.SB，完成 `mapProfileToUser` 占位邮箱与禁用账号合并。
+- 拆分 `auth-server.ts` 与 `auth-functions.ts`，避免客户端 bundle 引入服务端请求 API。
+- 改造 `/api/auth/$`、新增 `getViewer` 与认证入口 IP 限流。
+- 本地验收可开启 `EMAIL_PASS_LOGIN`；生产默认关闭。
+- 首页右上角登录入口 + 登录弹窗。
+- `/dashboard` 路由守卫与空页面。
+
+#### 阶段 2：固定邮箱数据与服务
+
+- 迁移 `mailboxes.user_id`、固定邮箱远期 `expires_at` 哨兵、新索引。
+- 新增固定前缀规范化与 `canonicalizeFixedAddress`。
+- 实现 `owned-mailbox-service`：创建、列表、快照、删除、50 上限 LRU。
+- 匿名服务加 `user_id IS NULL` 隔离与冲突状态。
+- 补齐服务层单元/集成测试。
+
+#### 阶段 3：后台界面
+
+- `/dashboard` 左栏：创建表单、配额、邮箱列表、复制、删除确认、退出登录。
+- 右栏：复用邮件列表/详情，接入轮询、断网、重连、空状态。
+- 移动端单列布局、键盘与 aria-live。
+- 淘汰/删除/会话过期等 Toast 与空状态。
+
+#### 阶段 4：收件链路
+
+- Webhook 改为匿名严格 + 固定去点双查询。
+- 固定邮箱离线收信、删除后忽略、去重与幂等测试。
+- 用真实 Mailtrap Webhook + 模拟邮件完成端到端验证。
+
+#### 阶段 5：真实登录与上线
+
+- 注册/核对三个 provider 的回调地址。
+- 配置生产环境变量并迁移 Turso。
+- 分别用 GitHub、Google、SB.SB 完成一次真实登录；真实凭据未就绪时先用 `EMAIL_PASS_LOGIN` 完成本地验收。
+- 浏览器验收首页、后台、50 上限、点号收信、权限隔离。
+- 更新部署文档与验收记录。
+
+### 15.11 测试与验收
+
+#### 15.11.1 自动化测试
+
+- 固定前缀：去点、最小 3 位、最大 32 位、大小写、非法字符、全是点、边界点号。
+- 固定邮箱：创建、重复打开、列表归属、删除级联、50 上限、LRU 选择、淘汰后计数、并发创建。
+- 冲突：固定 vs 匿名占用、固定 vs 其他用户、过期匿名接管、随机前缀重试。
+- 匿名回归：匿名快照/peek 不能读取固定邮箱；匿名创建不能返回固定邮箱。
+- Webhook：`a.b.c` 命中固定 `abc`；`a.b.c` 不命中匿名 `abc`；固定邮箱离线入库；删除后忽略；多收件人去重；重复 event_id 幂等。
+- 认证辅助函数：占位邮箱映射、provider 可用性、配置缺失降级、`EMAIL_PASS_LOGIN` 开关。
+- 认证端点限流：`sign-in/email` 10 次/分钟、`sign-up/email` 5 次/分钟、`sign-in/social` 10 次/分钟，按 IP 分桶。
+- 安全：固定邮箱按 id 越权返回 not_found；匿名地址读取固定邮箱返回 expired；生产构建不包含 `getRequestHeaders`、`getAuth`、数据库模块。
+
+#### 15.11.2 浏览器验收
+
+- 首页左侧右上角显示登录按钮；弹窗列出已配置的三个 provider。
+- GitHub / Google / SB.SB 各完成一次真实登录，成功后进入 `/dashboard`。
+- 未登录直接访问 `/dashboard` 会回到首页并自动打开登录弹窗。
+- 创建 `abc` 固定邮箱；发送到 `a.b.c@domain` 的邮件出现在后台，且匿名页面用该地址无法读取。
+- 创建第 51 个邮箱时自动淘汰最久未打开的邮箱，计数保持 50，Toast 显示被淘汰地址。
+- 手动删除邮箱后地址与邮件清除，可重新创建同名地址。
+- 固定邮箱地址被活跃匿名邮箱占用时，创建被拒绝且匿名邮箱不受影响。
+- 刷新、关闭页面、离线再恢复后固定邮箱与邮件仍在；页面隐藏时停止轮询。
+- 退出登录后回到首页；再次登录仍是同一批固定邮箱。
+- 未登录直接访问 `/dashboard` 会跳回首页并自动打开登录弹窗。
+- 本地开启 `EMAIL_PASS_LOGIN` 后，邮箱密码首次登录自动注册；关闭该开关后登录弹窗不再显示邮箱密码表单。
+- 移动端单列布局无横向溢出；对话框、列表操作、复制、删除可用键盘完成。
+
+#### 15.11.3 工程检查
+
+```bash
+bun test
+bun run lint
+bun run check
+bun run build
+```
+
+- 生产构建产物中不包含 provider secret、Better Auth secret、OAuth token。
+- 迁移可在空库和现有 `local.db` 副本上重复应用。
+- 真实 OAuth 与 Mailtrap 各记录一次端到端结果。
+
+### 15.12 明确不做
+
+- 默认不提供邮箱密码登录；仅在本地验收/明确需求时通过 `EMAIL_PASS_LOGIN` 开启，仍不提供找回密码与邮箱验证。
+- 跨 provider 账号合并、绑定、解绑。
+- 用户资料编辑、头像上传、账号注销。
+- 2FA、多设备会话管理。
+- 匿名邮箱认领/迁移到登录账号。
+- 固定邮箱重命名、转让、发件、回复、转发。
+- 管理员后台、审计、封禁、滥用处理。
+- 附件下载、原始邮件下载、全文搜索、标签、已读状态同步。
+- 固定邮箱邮件分页（首期只展示最近 200 封）；后续再加游标分页。
+- 多域名、多 Mailtrap Inbox。
+- 登录用户隐藏标签页的新邮件标题提示（固定邮箱邮件本身不会丢失）。
+
+### 15.13 风险与待确认
+
+- **Better Auth 版本**：`package.json` 为 `^1.5.3`，当前安装解析到 1.7.14；实施前锁定版本并按实际 API 核对 `genericOAuth`、`mapProfileToUser`、`encryptOAuthTokens` 与 CLI。
+- **SB.SB 本地回调**：需要论坛允许 localhost 回调或提供开发客户端；否则 SB.SB 只能在生产/隧道环境验收。
+- **固定邮箱 TTL 哨兵**：`expires_at` 保持 NOT NULL，固定邮箱使用 9999-12-31 哨兵；所有匿名查询/清理必须过滤 `user_id IS NULL`，遗漏会把固定邮箱当普通 TTL 邮箱，需用测试锁定。
+- **本地 libSQL 事务**：Better Auth 写入与邮箱轮询可能共用单连接；若出现 `TRANSACTION_ACTIVE`，需要扩展 `write-lock` 或为开发环境拆分连接。生产 Turso 多连接需验证。
+- **50 上限淘汰是破坏性操作**：必须确保文案、Toast 和测试覆盖；如果产品后续希望保留被淘汰邮箱的邮件，需要改为软删除 + 独立配额策略。
+- **200 封显示上限**：固定邮箱永久保留后邮件量可能增长，首期只显示最近 200 封，后续需要游标分页与容量策略。
+- **多实例限流与 50 计数**：当前限流是单进程内存；50 计数依赖事务与唯一索引，多实例需补充压测。
+- **真实 provider 凭据**：GitHub/Google/SB.SB 的 client id/secret、回调白名单和配额需要在部署前准备。
+- **无账号恢复机制**：固定邮箱归属依赖第三方账号；provider 账号丢失或无法登录时，没有邮箱/密码或人工找回路径。本期不做，需在产品文案中明确。
+- **Kumo Dialog API**：登录/删除弹窗使用 Dialog；后台用户操作已改为直接按钮，避免 DropdownMenu 的 MenuGroup 上下文限制。
+- **EMAIL_PASS_LOGIN**：开启后首次登录自动注册；生产必须保持关闭，除非明确需要。
+- **认证限流为进程内内存**：多实例部署时需改为共享存储或网关限流。

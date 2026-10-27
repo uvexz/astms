@@ -1,10 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
-import { createHmac } from 'node:crypto'
+import { createHmac, randomUUID } from 'node:crypto'
 
 import type { Database } from '#/db'
-import { messages, webhookReceipts } from '#/db/schema'
+import { messages, user, webhookReceipts } from '#/db/schema'
 import { createMailboxWithPrefix } from '#/features/mailbox/mailbox-service'
+import {
+  createOwnedMailboxWithPrefix,
+  deleteOwnedMailbox,
+} from '#/features/mailbox/owned-mailbox-service'
 import { createTestDatabase } from '#/test-utils/database'
 
 import type { InboundMessage } from './client'
@@ -77,6 +81,34 @@ describe('handleMailtrapWebhook', () => {
       prefix,
       now,
     })
+  }
+
+  async function createFixedMailbox(prefix: string, now = START) {
+    const userId = randomUUID()
+
+    await db.insert(user).values({
+      id: userId,
+      name: 'Fixed User',
+      email: `${userId}@oauth.invalid`,
+      emailVerified: false,
+      image: null,
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    const result = await createOwnedMailboxWithPrefix({
+      db,
+      domain: DOMAIN,
+      userId,
+      prefix,
+      now,
+    })
+
+    if (result.status !== 'active') {
+      throw new Error('Unable to create fixed mailbox for test')
+    }
+
+    return { ...result.mailbox, userId }
   }
 
   function callWebhook(options: {
@@ -345,5 +377,77 @@ describe('handleMailtrapWebhook', () => {
     expect(JSON.parse(stored[0].recipientsJson)).toEqual([
       'inbox-one@example.test',
     ])
+  })
+
+  test('matches a dotted recipient to a fixed mailbox', async () => {
+    const fixed = await createFixedMailbox('abc')
+    const body = makePayload([makeEvent()])
+    const { result } = callWebhook({
+      body,
+      getMessage: () =>
+        Promise.resolve(makeMessage({ to: ['a.b.c@example.test'] })),
+    })
+
+    expect((await result).status).toBe(200)
+
+    const stored = await db.select().from(messages)
+    expect(stored).toHaveLength(1)
+    expect(stored[0].mailboxId).toBe(fixed.id)
+    expect(JSON.parse(stored[0].recipientsJson)).toEqual(['a.b.c@example.test'])
+  })
+
+  test('does not match dotted recipients to anonymous mailboxes', async () => {
+    await createMailbox('abcdef')
+    const body = makePayload([makeEvent()])
+    const { result } = callWebhook({
+      body,
+      getMessage: () =>
+        Promise.resolve(makeMessage({ to: ['a.b.c.d.e.f@example.test'] })),
+    })
+
+    expect((await result).status).toBe(200)
+    expect(await db.select().from(messages)).toHaveLength(0)
+
+    const receipts = await db.select().from(webhookReceipts)
+    expect(receipts[0].outcome).toBe('ignored')
+  })
+
+  test('stores mail for a fixed mailbox after the anonymous TTL window', async () => {
+    const fixed = await createFixedMailbox('fixed-ttl')
+    const body = makePayload([makeEvent()])
+    const { result } = callWebhook({
+      body,
+      now: at(10_000),
+      getMessage: () =>
+        Promise.resolve(makeMessage({ to: ['fixed-ttl@example.test'] })),
+    })
+
+    expect((await result).status).toBe(200)
+
+    const stored = await db.select().from(messages)
+    expect(stored).toHaveLength(1)
+    expect(stored[0].mailboxId).toBe(fixed.id)
+  })
+
+  test('ignores a message for a deleted fixed mailbox', async () => {
+    const fixed = await createFixedMailbox('fixed-gone')
+
+    expect(
+      await deleteOwnedMailbox({
+        db,
+        userId: fixed.userId,
+        mailboxId: fixed.id,
+      }),
+    ).toBe(true)
+
+    const body = makePayload([makeEvent()])
+    const { result } = callWebhook({
+      body,
+      getMessage: () =>
+        Promise.resolve(makeMessage({ to: ['fixed-gone@example.test'] })),
+    })
+
+    expect((await result).status).toBe(200)
+    expect(await db.select().from(messages)).toHaveLength(0)
   })
 })

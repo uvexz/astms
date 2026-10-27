@@ -1,9 +1,17 @@
-import { betterAuth } from 'better-auth'
-import { tanstackStartCookies } from 'better-auth/tanstack-start'
+import '@tanstack/react-start/server-only'
 
-export const auth = betterAuth({
-  emailAndPassword: {
-    enabled: true,
-  },
-  plugins: [tanstackStartCookies()],
-})
+import { betterAuth } from 'better-auth'
+
+import { createAuthOptions } from './auth-config'
+
+type AuthInstance = ReturnType<typeof betterAuth>
+
+let authInstance: AuthInstance | null = null
+
+export function getAuth(): AuthInstance {
+  if (!authInstance) {
+    authInstance = betterAuth(createAuthOptions())
+  }
+
+  return authInstance
+}

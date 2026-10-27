@@ -1,8 +1,10 @@
 import type { MailboxMessageView } from './types'
 
+// A fixed timezone keeps SSR and hydration output identical.
 const dateTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
   dateStyle: 'medium',
   timeStyle: 'short',
+  timeZone: 'Asia/Shanghai',
 })
 
 export function formatRemainingTime(seconds: number): string {

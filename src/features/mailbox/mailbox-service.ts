@@ -14,6 +14,7 @@ import {
   generateRandomPrefix,
   normalizeAddress,
 } from './address'
+import { isUniqueConstraintError } from './db-errors'
 
 const GENERATED_PREFIX_ATTEMPTS = 5
 const SNAPSHOT_MESSAGE_LIMIT = 200
@@ -48,8 +49,7 @@ export type MailboxSnapshot =
   | { status: 'expired' }
 
 export type MailboxPeek =
-  | { status: 'active'; latestMessageId: string | null }
-  | { status: 'expired' }
+  { status: 'active'; latestMessageId: string | null } | { status: 'expired' }
 
 export interface CleanupResult {
   ended: number
@@ -69,17 +69,11 @@ interface CreateWithPrefixOptions extends CreateMailboxOptions {
   prefix: string
 }
 
-function isUniqueConstraintError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false
+export class MailboxAddressInUseError extends Error {
+  constructor() {
+    super('Mailbox address is in use')
+    this.name = 'MailboxAddressInUseError'
   }
-
-  const code = (error as { code?: string }).code
-  return (
-    code === 'SQLITE_CONSTRAINT_UNIQUE' ||
-    code === 'SQLITE_CONSTRAINT' ||
-    /unique constraint failed/i.test(error.message)
-  )
 }
 
 async function findActiveMailbox(
@@ -89,10 +83,31 @@ async function findActiveMailbox(
   const rows = await db
     .select()
     .from(mailboxes)
-    .where(and(eq(mailboxes.address, address), isNull(mailboxes.endedAt)))
+    .where(
+      and(
+        eq(mailboxes.address, address),
+        isNull(mailboxes.endedAt),
+        isNull(mailboxes.userId),
+      ),
+    )
     .limit(1)
 
   return rows.at(0)
+}
+
+async function activeAddressExistsAnyOwner(
+  db: Database,
+  address: string,
+): Promise<boolean> {
+  const row = (
+    await db
+      .select({ id: mailboxes.id })
+      .from(mailboxes)
+      .where(and(eq(mailboxes.address, address), isNull(mailboxes.endedAt)))
+      .limit(1)
+  ).at(0)
+
+  return row !== undefined
 }
 
 async function tryCreateOrOpen(
@@ -112,6 +127,7 @@ async function tryCreateOrOpen(
             and(
               eq(mailboxes.address, address),
               isNull(mailboxes.endedAt),
+              isNull(mailboxes.userId),
               lte(mailboxes.expiresAt, now),
             ),
           )
@@ -121,7 +137,11 @@ async function tryCreateOrOpen(
             .select()
             .from(mailboxes)
             .where(
-              and(eq(mailboxes.address, address), isNull(mailboxes.endedAt)),
+              and(
+                eq(mailboxes.address, address),
+                isNull(mailboxes.endedAt),
+                isNull(mailboxes.userId),
+              ),
             )
             .limit(1)
         ).at(0)
@@ -174,6 +194,13 @@ async function tryCreateOrOpen(
       return null
     }
 
+    if (
+      options.joinExisting &&
+      (await activeAddressExistsAnyOwner(options.db, address))
+    ) {
+      throw new MailboxAddressInUseError()
+    }
+
     throw error
   }
 }
@@ -205,18 +232,27 @@ export async function createMailboxWithPrefix(
 ): Promise<CreatedMailbox> {
   const now = options.now ?? new Date()
 
-  return tryCreateOrOpen({
+  const mailbox = await tryCreateOrOpen({
     ...options,
     now,
     localPart: options.prefix,
     joinExisting: true,
-  }).then((mailbox) => {
-    if (!mailbox) {
-      throw new Error('Unable to create mailbox')
-    }
-
-    return mailbox
   })
+
+  if (mailbox) {
+    return mailbox
+  }
+
+  if (
+    await activeAddressExistsAnyOwner(
+      options.db,
+      formatMailboxAddress(options.prefix, options.domain),
+    )
+  ) {
+    throw new MailboxAddressInUseError()
+  }
+
+  throw new Error('Unable to create mailbox')
 }
 
 export async function readMailboxSnapshot(options: {
@@ -242,6 +278,7 @@ export async function readMailboxSnapshot(options: {
           and(
             eq(mailboxes.address, address),
             isNull(mailboxes.endedAt),
+            isNull(mailboxes.userId),
             lte(mailboxes.expiresAt, now),
           ),
         )
@@ -254,6 +291,7 @@ export async function readMailboxSnapshot(options: {
             and(
               eq(mailboxes.address, address),
               isNull(mailboxes.endedAt),
+              isNull(mailboxes.userId),
               gt(mailboxes.expiresAt, now),
             ),
           )
@@ -320,6 +358,7 @@ export async function readMailboxPeek(options: {
         and(
           eq(mailboxes.address, address),
           isNull(mailboxes.endedAt),
+          isNull(mailboxes.userId),
           gt(mailboxes.expiresAt, now),
         ),
       )
@@ -365,7 +404,13 @@ export async function cleanupExpiredMailboxes(options: {
       const ended = await tx
         .update(mailboxes)
         .set({ endedAt: now })
-        .where(and(isNull(mailboxes.endedAt), lte(mailboxes.expiresAt, now)))
+        .where(
+          and(
+            isNull(mailboxes.endedAt),
+            isNull(mailboxes.userId),
+            lte(mailboxes.expiresAt, now),
+          ),
+        )
         .returning({ id: mailboxes.id })
 
       const candidates = await tx
@@ -373,6 +418,7 @@ export async function cleanupExpiredMailboxes(options: {
         .from(mailboxes)
         .where(
           and(
+            isNull(mailboxes.userId),
             isNotNull(mailboxes.endedAt),
             lte(mailboxes.endedAt, mailboxCutoff),
           ),

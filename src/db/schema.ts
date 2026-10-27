@@ -7,6 +7,10 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
 
+import { user } from './auth-schema'
+
+export * from './auth-schema'
+
 export const mailboxes = sqliteTable(
   'mailboxes',
   {
@@ -14,8 +18,12 @@ export const mailboxes = sqliteTable(
     address: text('address').notNull(),
     localPart: text('local_part').notNull(),
     domain: text('domain').notNull(),
+    userId: text('user_id').references(() => user.id, {
+      onDelete: 'cascade',
+    }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).notNull(),
+    // Fixed mailboxes use a far-future sentinel; they are identified by user_id.
     expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
     endedAt: integer('ended_at', { mode: 'timestamp_ms' }),
   },
@@ -25,6 +33,7 @@ export const mailboxes = sqliteTable(
       .on(table.address)
       .where(sql`${table.endedAt} is null`),
     index('mailboxes_expires_at_idx').on(table.expiresAt),
+    index('mailboxes_user_id_ended_at_idx').on(table.userId, table.endedAt),
   ],
 )
 

@@ -1,12 +1,15 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
+  canonicalizeFixedAddress,
   extractEmailAddress,
   generateRandomPrefix,
   normalizeAddress,
+  normalizeFixedPrefix,
   normalizePrefix,
   RANDOM_FIRST_NAMES,
   RANDOM_LAST_NAMES,
+  validateFixedPrefix,
   validatePrefix,
 } from './address'
 
@@ -44,6 +47,51 @@ describe('validatePrefix', () => {
   })
 })
 
+describe('fixed prefix rules', () => {
+  test('removes dots before validating', () => {
+    expect(normalizeFixedPrefix(' A.B.C ')).toBe('abc')
+    expect(validateFixedPrefix('a.b.c')).toEqual({ ok: true, prefix: 'abc' })
+    expect(validateFixedPrefix('.abc.')).toEqual({ ok: true, prefix: 'abc' })
+    expect(validateFixedPrefix('a..b..c')).toEqual({ ok: true, prefix: 'abc' })
+  })
+
+  test('accepts three to thirty-two characters after removing dots', () => {
+    expect(validateFixedPrefix('a.b').ok).toBe(false)
+    expect(validateFixedPrefix('a-b').ok).toBe(true)
+    expect(validateFixedPrefix('a'.repeat(32)).ok).toBe(true)
+    expect(validateFixedPrefix(`${'a'.repeat(32)}.b`).ok).toBe(false)
+  })
+
+  test('rejects illegal characters after removing dots', () => {
+    expect(validateFixedPrefix('a_b').ok).toBe(false)
+    expect(validateFixedPrefix('你好世界').ok).toBe(false)
+    expect(validateFixedPrefix('-abc').ok).toBe(false)
+    expect(validateFixedPrefix('abc-').ok).toBe(false)
+    expect(validateFixedPrefix('...').ok).toBe(false)
+  })
+})
+
+describe('canonicalizeFixedAddress', () => {
+  test('removes dots from the local part only', () => {
+    expect(canonicalizeFixedAddress('A.B.C@Example.Test')).toBe(
+      'abc@example.test',
+    )
+    expect(canonicalizeFixedAddress('ab.c@sub.example.test')).toBe(
+      'abc@sub.example.test',
+    )
+    expect(canonicalizeFixedAddress('abc@example.test')).toBe(
+      'abc@example.test',
+    )
+  })
+
+  test('returns null for malformed addresses', () => {
+    expect(canonicalizeFixedAddress('not-an-email')).toBeNull()
+    expect(canonicalizeFixedAddress('a..b@example.test')).toBe(
+      'ab@example.test',
+    )
+  })
+})
+
 describe('generateRandomPrefix', () => {
   test('combines a first name, last name, and three-digit number', () => {
     for (let i = 0; i < 200; i += 1) {
@@ -77,6 +125,7 @@ describe('generateRandomPrefix', () => {
 describe('normalizeAddress', () => {
   test('normalizes a complete address', () => {
     expect(normalizeAddress('  User-1@Domain.Name ')).toBe('user-1@domain.name')
+    expect(normalizeAddress(' A.B.C@Domain.Name ')).toBe('a.b.c@domain.name')
   })
 
   test('rejects malformed addresses', () => {

@@ -3,8 +3,15 @@ export const PREFIX_MAX_LENGTH = 32
 export const PREFIX_RULE_MESSAGE =
   '前缀需为 6–32 位，只能包含字母、数字和 -，并以字母或数字开头和结尾'
 
+export const FIXED_PREFIX_MIN_LENGTH = 3
+export const FIXED_PREFIX_MAX_LENGTH = 32
+export const FIXED_PREFIX_RULE_MESSAGE =
+  '固定邮箱前缀需为 3–32 位（点号会被忽略），只能包含字母、数字和 -，并以字母或数字开头和结尾'
+
 const PREFIX_PATTERN = /^[a-z0-9][a-z0-9-]{4,30}[a-z0-9]$/
-const LOCAL_PART_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/
+const FIXED_PREFIX_PATTERN = /^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/
+// Incoming recipients may contain dots; creation rules remain stricter.
+const LOCAL_PART_PATTERN = /^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$/
 const DOMAIN_PATTERN =
   /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/
 
@@ -81,11 +88,25 @@ export function normalizePrefix(raw: string): string {
   return raw.trim().toLowerCase()
 }
 
+export function normalizeFixedPrefix(raw: string): string {
+  return normalizePrefix(raw).replaceAll('.', '')
+}
+
 export function validatePrefix(raw: string): PrefixValidation {
   const prefix = normalizePrefix(raw)
 
   if (!PREFIX_PATTERN.test(prefix)) {
     return { ok: false, message: PREFIX_RULE_MESSAGE }
+  }
+
+  return { ok: true, prefix }
+}
+
+export function validateFixedPrefix(raw: string): PrefixValidation {
+  const prefix = normalizeFixedPrefix(raw)
+
+  if (!FIXED_PREFIX_PATTERN.test(prefix)) {
+    return { ok: false, message: FIXED_PREFIX_RULE_MESSAGE }
   }
 
   return { ok: true, prefix }
@@ -111,6 +132,18 @@ export function normalizeAddress(raw: string): string | null {
   }
 
   return `${localPart}@${domain}`
+}
+
+export function canonicalizeFixedAddress(raw: string): string | null {
+  const address = normalizeAddress(raw)
+
+  if (!address) {
+    return null
+  }
+
+  const separator = address.lastIndexOf('@')
+  const localPart = address.slice(0, separator).replaceAll('.', '')
+  return `${localPart}@${address.slice(separator + 1)}`
 }
 
 export function extractEmailAddress(raw: string): string | null {

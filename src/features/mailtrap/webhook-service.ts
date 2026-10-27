@@ -2,11 +2,14 @@ import '@tanstack/react-start/server-only'
 
 import { randomUUID } from 'node:crypto'
 
-import { and, eq, gt, inArray, isNull } from 'drizzle-orm'
+import { and, eq, gt, inArray, isNotNull, isNull } from 'drizzle-orm'
 
 import type { Database } from '#/db'
 import { mailboxes, messages, webhookReceipts } from '#/db/schema'
-import { extractEmailAddress } from '#/features/mailbox/address'
+import {
+  canonicalizeFixedAddress,
+  extractEmailAddress,
+} from '#/features/mailbox/address'
 import { withWriteLock } from '#/server/write-lock'
 
 import type { InboundMessage } from './client'
@@ -153,20 +156,51 @@ export async function handleMailtrapWebhook(options: {
             .filter((address): address is string => address !== null),
         ),
       ]
+      const fixedRecipients = [
+        ...new Set(
+          recipients
+            .map(canonicalizeFixedAddress)
+            .filter((address): address is string => address !== null),
+        ),
+      ]
 
       let matchedMailboxes: Array<{ id: string; address: string }> = []
 
       if (recipients.length > 0) {
-        matchedMailboxes = await deps.db
-          .select({ id: mailboxes.id, address: mailboxes.address })
-          .from(mailboxes)
-          .where(
-            and(
-              inArray(mailboxes.address, recipients),
-              isNull(mailboxes.endedAt),
-              gt(mailboxes.expiresAt, processedAt),
+        const [anonymousMailboxes, fixedMailboxes] = await Promise.all([
+          deps.db
+            .select({ id: mailboxes.id, address: mailboxes.address })
+            .from(mailboxes)
+            .where(
+              and(
+                inArray(mailboxes.address, recipients),
+                isNull(mailboxes.endedAt),
+                isNull(mailboxes.userId),
+                gt(mailboxes.expiresAt, processedAt),
+              ),
             ),
-          )
+          fixedRecipients.length > 0
+            ? deps.db
+                .select({ id: mailboxes.id, address: mailboxes.address })
+                .from(mailboxes)
+                .where(
+                  and(
+                    inArray(mailboxes.address, fixedRecipients),
+                    isNull(mailboxes.endedAt),
+                    isNotNull(mailboxes.userId),
+                  ),
+                )
+            : Promise.resolve([]),
+        ])
+
+        matchedMailboxes = [
+          ...new Map(
+            [...anonymousMailboxes, ...fixedMailboxes].map((mailbox) => [
+              mailbox.id,
+              mailbox,
+            ]),
+          ).values(),
+        ]
       }
 
       if (matchedMailboxes.length === 0) {

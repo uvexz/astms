@@ -5,16 +5,18 @@ import { randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 
 import type { Database } from '#/db'
-import { mailboxes, messages } from '#/db/schema'
+import { mailboxes, messages, user } from '#/db/schema'
 import { createTestDatabase } from '#/test-utils/database'
 
 import {
   cleanupExpiredMailboxes,
   createMailboxWithPrefix,
   createOrOpenMailbox,
+  MailboxAddressInUseError,
   readMailboxPeek,
   readMailboxSnapshot,
 } from './mailbox-service'
+import { createOwnedMailboxWithPrefix } from './owned-mailbox-service'
 
 const DOMAIN = 'example.test'
 const TTL_SECONDS = 90
@@ -22,6 +24,22 @@ const START = new Date('2026-10-27T00:00:00.000Z')
 
 function at(seconds: number) {
   return new Date(START.getTime() + seconds * 1_000)
+}
+
+async function insertUser(db: Database) {
+  const id = randomUUID()
+
+  await db.insert(user).values({
+    id,
+    name: 'Test User',
+    email: `${id}@oauth.invalid`,
+    emailVerified: false,
+    image: null,
+    createdAt: START,
+    updatedAt: START,
+  })
+
+  return id
 }
 
 async function insertMessage(db: Database, mailboxId: string, subject: string) {
@@ -171,8 +189,9 @@ describe('mailbox lifecycle', () => {
       now: START,
     })
 
-    expect(await readMailboxPeek({ db, address: created.address, now: at(10) }))
-      .toEqual({ status: 'active', latestMessageId: null })
+    expect(
+      await readMailboxPeek({ db, address: created.address, now: at(10) }),
+    ).toEqual({ status: 'active', latestMessageId: null })
 
     const messageId = await insertMessage(
       db,
@@ -180,8 +199,9 @@ describe('mailbox lifecycle', () => {
       'peeked message',
     )
 
-    expect(await readMailboxPeek({ db, address: created.address, now: at(30) }))
-      .toEqual({ status: 'active', latestMessageId: messageId })
+    expect(
+      await readMailboxPeek({ db, address: created.address, now: at(30) }),
+    ).toEqual({ status: 'active', latestMessageId: messageId })
 
     const [row] = await db
       .select()
@@ -191,8 +211,9 @@ describe('mailbox lifecycle', () => {
     expect(row.lastSeenAt.toISOString()).toBe(START.toISOString())
     expect(row.expiresAt.toISOString()).toBe(at(90).toISOString())
 
-    expect(await readMailboxPeek({ db, address: created.address, now: at(91) }))
-      .toEqual({ status: 'expired' })
+    expect(
+      await readMailboxPeek({ db, address: created.address, now: at(91) }),
+    ).toEqual({ status: 'expired' })
 
     const [expiredRow] = await db
       .select()
@@ -277,6 +298,89 @@ describe('mailbox lifecycle', () => {
     })
 
     expect(result.ended).toBe(1)
+    expect(result.deletedMailboxes).toBe(0)
+    expect(await db.select().from(mailboxes)).toHaveLength(1)
+  })
+
+  test('does not expose fixed mailboxes through anonymous reads', async () => {
+    const userId = await insertUser(db)
+    const fixed = await createOwnedMailboxWithPrefix({
+      db,
+      domain: DOMAIN,
+      userId,
+      prefix: 'fixed-hidden',
+      now: START,
+    })
+
+    expect(fixed.status).toBe('active')
+
+    if (fixed.status !== 'active') {
+      return
+    }
+
+    expect(
+      await readMailboxSnapshot({
+        db,
+        address: fixed.mailbox.address,
+        ttlSeconds: TTL_SECONDS,
+        now: at(10),
+      }),
+    ).toEqual({ status: 'expired' })
+
+    expect(
+      await readMailboxPeek({
+        db,
+        address: fixed.mailbox.address,
+        now: at(10),
+      }),
+    ).toEqual({ status: 'expired' })
+  })
+
+  test('rejects anonymous creation on a fixed mailbox address', async () => {
+    const userId = await insertUser(db)
+
+    await createOwnedMailboxWithPrefix({
+      db,
+      domain: DOMAIN,
+      userId,
+      prefix: 'fixed-owned',
+      now: START,
+    })
+
+    await expect(
+      createMailboxWithPrefix({
+        db,
+        domain: DOMAIN,
+        ttlSeconds: TTL_SECONDS,
+        prefix: 'fixed-owned',
+        now: at(10),
+      }),
+    ).rejects.toBeInstanceOf(MailboxAddressInUseError)
+  })
+
+  test('cleanup never ends or deletes fixed mailboxes', async () => {
+    const userId = await insertUser(db)
+    const fixed = await createOwnedMailboxWithPrefix({
+      db,
+      domain: DOMAIN,
+      userId,
+      prefix: 'fixed-cleanup',
+      now: START,
+    })
+
+    expect(fixed.status).toBe('active')
+
+    if (fixed.status !== 'active') {
+      return
+    }
+
+    const result = await cleanupExpiredMailboxes({
+      db,
+      now: at(10 * 365 * 24 * 60 * 60),
+      retentionSeconds: 0,
+    })
+
+    expect(result.ended).toBe(0)
     expect(result.deletedMailboxes).toBe(0)
     expect(await db.select().from(mailboxes)).toHaveLength(1)
   })

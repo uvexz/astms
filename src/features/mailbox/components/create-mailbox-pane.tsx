@@ -1,4 +1,4 @@
-import type { RefObject } from 'react'
+import type { ReactNode, RefObject } from 'react'
 
 import { InfoIcon, StopIcon, TrayIcon } from '@phosphor-icons/react'
 import { Badge } from '@cloudflare/kumo/components/badge'
@@ -23,6 +23,8 @@ interface CreateMailboxPaneProps {
   remainingSeconds: number | null
   paused: boolean
   inputRef: RefObject<HTMLInputElement | null>
+  topRightAction?: ReactNode
+  isLoggedIn?: boolean
 }
 
 export function CreateMailboxPane({
@@ -38,6 +40,8 @@ export function CreateMailboxPane({
   remainingSeconds,
   paused,
   inputRef,
+  topRightAction,
+  isLoggedIn = false,
 }: CreateMailboxPaneProps) {
   const isActive = phase === 'active' && activeAddress !== null
   const prefixValue =
@@ -54,8 +58,14 @@ export function CreateMailboxPane({
       : 'success'
 
   return (
-    <section className="flex min-h-dvh flex-col bg-kumo-base lg:h-dvh lg:min-h-0">
-      <div className="flex flex-1 items-center justify-center px-6 py-10">
+    <section className="relative flex min-h-dvh flex-col bg-kumo-base lg:h-dvh lg:min-h-0">
+      {topRightAction ? (
+        <div className="absolute top-4 right-4 z-10 sm:top-6 sm:right-6">
+          {topRightAction}
+        </div>
+      ) : null}
+
+      <div className="flex flex-1 items-center justify-center px-6 py-16 sm:py-10">
         <div className="w-full max-w-md">
           <Text as="p" variant="secondary" bold>
             {brand}
@@ -135,6 +145,14 @@ export function CreateMailboxPane({
             )}
           </form>
 
+          {isLoggedIn && !isActive ? (
+            <div className="mt-3">
+              <Text variant="secondary" size="sm">
+                首页创建的是临时地址；固定邮箱请到后台创建。
+              </Text>
+            </div>
+          ) : null}
+
           {isActive ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Badge variant={statusVariant} appearance="dot">
@@ -168,9 +186,7 @@ export function CreateMailboxPane({
               '知道此地址的人都能查看邮件，请勿用于敏感信息；页面离开前台后地址会很快失效。'
             ) : (
               <div className="grid gap-1">
-                <span>
-                  {config.prefixRuleMessage}。
-                </span>
+                <span>{config.prefixRuleMessage}。</span>
                 <span>
                   知道此地址的人都能查看邮件，请勿用于敏感信息；页面离开前台后地址会很快失效。
                 </span>
