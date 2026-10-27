@@ -44,3 +44,7 @@ export type MailboxSnapshotResult =
       messages: Array<MailboxMessageView>
     }
   | { status: 'expired' }
+
+export type MailboxPeekResult =
+  | { status: 'active'; latestMessageId: string | null }
+  | { status: 'expired' }

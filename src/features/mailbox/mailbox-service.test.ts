@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import { randomUUID } from 'node:crypto'
 
+import { eq } from 'drizzle-orm'
+
 import type { Database } from '#/db'
 import { mailboxes, messages } from '#/db/schema'
 import { createTestDatabase } from '#/test-utils/database'
@@ -10,6 +12,7 @@ import {
   cleanupExpiredMailboxes,
   createMailboxWithPrefix,
   createOrOpenMailbox,
+  readMailboxPeek,
   readMailboxSnapshot,
 } from './mailbox-service'
 
@@ -22,8 +25,10 @@ function at(seconds: number) {
 }
 
 async function insertMessage(db: Database, mailboxId: string, subject: string) {
+  const id = randomUUID()
+
   await db.insert(messages).values({
-    id: randomUUID(),
+    id,
     mailboxId,
     mailtrapMessageId: randomUUID(),
     fromAddress: 'sender@example.test',
@@ -34,6 +39,8 @@ async function insertMessage(db: Database, mailboxId: string, subject: string) {
     receivedAt: at(5),
     createdAt: at(5),
   })
+
+  return id
 }
 
 describe('mailbox lifecycle', () => {
@@ -153,6 +160,46 @@ describe('mailbox lifecycle', () => {
     })
 
     expect(snapshot).toEqual({ status: 'expired' })
+  })
+
+  test('peeks at the latest message without extending the expiry', async () => {
+    const created = await createMailboxWithPrefix({
+      db,
+      domain: DOMAIN,
+      ttlSeconds: TTL_SECONDS,
+      prefix: 'peek-me',
+      now: START,
+    })
+
+    expect(await readMailboxPeek({ db, address: created.address, now: at(10) }))
+      .toEqual({ status: 'active', latestMessageId: null })
+
+    const messageId = await insertMessage(
+      db,
+      created.mailboxId,
+      'peeked message',
+    )
+
+    expect(await readMailboxPeek({ db, address: created.address, now: at(30) }))
+      .toEqual({ status: 'active', latestMessageId: messageId })
+
+    const [row] = await db
+      .select()
+      .from(mailboxes)
+      .where(eq(mailboxes.id, created.mailboxId))
+
+    expect(row.lastSeenAt.toISOString()).toBe(START.toISOString())
+    expect(row.expiresAt.toISOString()).toBe(at(90).toISOString())
+
+    expect(await readMailboxPeek({ db, address: created.address, now: at(91) }))
+      .toEqual({ status: 'expired' })
+
+    const [expiredRow] = await db
+      .select()
+      .from(mailboxes)
+      .where(eq(mailboxes.id, created.mailboxId))
+
+    expect(expiredRow.endedAt).toBeNull()
   })
 
   test('does not expose old messages when an expired address is recreated', async () => {

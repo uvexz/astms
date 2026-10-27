@@ -47,6 +47,10 @@ export type MailboxSnapshot =
     }
   | { status: 'expired' }
 
+export type MailboxPeek =
+  | { status: 'active'; latestMessageId: string | null }
+  | { status: 'expired' }
+
 export interface CleanupResult {
   ended: number
   deletedMailboxes: number
@@ -292,6 +296,50 @@ export async function readMailboxSnapshot(options: {
   )
 
   return result ?? { status: 'expired' }
+}
+
+// Read-only probe for hidden tabs; it must not extend the TTL like the snapshot does.
+export async function readMailboxPeek(options: {
+  db: Database
+  address: string
+  now?: Date
+}): Promise<MailboxPeek> {
+  const address = normalizeAddress(options.address)
+
+  if (!address) {
+    return { status: 'expired' }
+  }
+
+  const now = options.now ?? new Date()
+
+  const mailbox = (
+    await options.db
+      .select({ id: mailboxes.id })
+      .from(mailboxes)
+      .where(
+        and(
+          eq(mailboxes.address, address),
+          isNull(mailboxes.endedAt),
+          gt(mailboxes.expiresAt, now),
+        ),
+      )
+      .limit(1)
+  ).at(0)
+
+  if (!mailbox) {
+    return { status: 'expired' }
+  }
+
+  const latestMessage = (
+    await options.db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(eq(messages.mailboxId, mailbox.id))
+      .orderBy(desc(messages.receivedAt), desc(messages.createdAt))
+      .limit(1)
+  ).at(0)
+
+  return { status: 'active', latestMessageId: latestMessage?.id ?? null }
 }
 
 export async function cleanupExpiredMailboxes(options: {

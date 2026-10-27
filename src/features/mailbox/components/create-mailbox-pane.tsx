@@ -73,12 +73,6 @@ export function CreateMailboxPane({
             aria-busy={isCreating}
           >
             <InputGroup
-              label="邮箱前缀"
-              description={
-                isActive
-                  ? `页面保持在前台会每 ${Math.round(config.pollIntervalMs / 1_000)} 秒自动续期。`
-                  : `${config.prefixRuleMessage}。留空将随机生成类似 tom-holland150 的地址。`
-              }
               error={
                 formError ? { message: formError, match: true } : undefined
               }
@@ -101,6 +95,17 @@ export function CreateMailboxPane({
               />
               <InputGroup.Suffix>@{config.domain}</InputGroup.Suffix>
             </InputGroup>
+
+            {formError ? (
+              <Text variant="error" size="sm" role="alert">
+                {formError}
+              </Text>
+            ) : isActive ? (
+              <Text variant="secondary" size="sm">
+                页面保持在前台会每 {Math.round(config.pollIntervalMs / 1_000)}{' '}
+                秒自动续期。
+              </Text>
+            ) : null}
 
             {isActive ? (
               <Button
@@ -158,7 +163,20 @@ export function CreateMailboxPane({
           className="w-full max-w-md"
           variant="secondary"
           icon={<InfoIcon size={18} weight="fill" />}
-          description="知道此地址的人都能查看邮件，请勿用于敏感信息；页面离开前台后地址会很快失效。"
+          description={
+            isActive ? (
+              '知道此地址的人都能查看邮件，请勿用于敏感信息；页面离开前台后地址会很快失效。'
+            ) : (
+              <div className="grid gap-1">
+                <span>
+                  {config.prefixRuleMessage}。
+                </span>
+                <span>
+                  知道此地址的人都能查看邮件，请勿用于敏感信息；页面离开前台后地址会很快失效。
+                </span>
+              </div>
+            )
+          }
         />
       </div>
     </section>

@@ -18,6 +18,7 @@ import type {
 } from '#/features/mailbox/types'
 import { useBrowserAvailability } from '#/features/mailbox/use-browser-availability'
 import { useCountdown } from '#/features/mailbox/use-countdown'
+import { useUnreadTitle } from '#/features/mailbox/use-unread-title'
 
 const SESSION_STORAGE_KEY = 'astms.current-mailbox'
 
@@ -255,6 +256,18 @@ function HomePage() {
     activeWindow?.expiresAt ?? null,
     activeWindow?.serverNow ?? null,
   )
+
+  useUnreadTitle({
+    address,
+    baseTitle: `${config.siteName} — 临时邮箱`,
+    latestMessageId:
+      snapshotQuery.data?.status === 'active'
+        ? (snapshotQuery.data.messages[0]?.id ?? null)
+        : null,
+    pollIntervalMs,
+    visible,
+    online,
+  })
 
   function handlePrefixChange(value: string) {
     setPrefix(value)

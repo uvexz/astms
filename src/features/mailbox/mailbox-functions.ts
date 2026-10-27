@@ -16,10 +16,12 @@ import {
   cleanupExpiredMailboxes,
   createMailboxWithPrefix,
   createOrOpenMailbox,
+  readMailboxPeek,
   readMailboxSnapshot,
 } from './mailbox-service'
 import type {
   CreateMailboxResult,
+  MailboxPeekResult,
   MailboxPublicConfig,
   MailboxSnapshotResult,
 } from './types'
@@ -124,6 +126,16 @@ export const createMailbox = createServerFn({ method: 'POST' })
 
       throw error
     }
+  })
+
+export const peekMailbox = createServerFn({ method: 'GET' })
+  .validator(
+    z.object({
+      address: z.string().trim().min(3).max(320),
+    }),
+  )
+  .handler(async ({ data }): Promise<MailboxPeekResult> => {
+    return readMailboxPeek({ db, address: data.address })
   })
 
 export const getMailboxSnapshot = createServerFn({ method: 'GET' })
