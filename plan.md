@@ -25,6 +25,7 @@
 - 用户提供的 `mailbox_id` 已确认就是 Inbound API/Webhook 中的 `inbox_id`。
 - 拉取邮件只需要 `inbox_id + message_id`。
 - `folder_id`、`domain_id` 用于创建或管理 Inbox，本期运行时不使用，也不重复创建 Inbox。
+- Webhook Signing Secret 由 Mailtrap 在创建 Webhook 后自动生成，需在 Webhook 详情中复制并填入 `MAILTRAP_WEBHOOK_SIGNING_SECRET`；Mailtrap 后台不支持填写自定义 Secret。
 - 本期只支持一个域名和一个 Inbox。
 
 ### 2.2 匿名邮箱生命周期

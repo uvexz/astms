@@ -1,235 +1,102 @@
-Welcome to your new TanStack Start app!
+# ASTMS
 
-# Getting Started
+ASTMS（A simple temporary mailbox service）是一个无需注册的临时邮箱服务。用户创建 `prefix@MAILBOX_DOMAIN` 地址后，在页面保持前台期间接收邮件；页面隐藏、断网或关闭后停止续期，地址在 TTL 到期后失效。
 
-To run this application:
+> 隐私边界：任何知道完整邮箱地址的人都能查看该邮箱的邮件。请勿用于敏感或正式用途。
+
+## 功能
+
+- 自定义前缀，或留空生成 10–12 位随机地址。
+- 页面可见且在线时默认每 10 秒轮询并续期；离开前台或断网后停止。
+- Mailtrap Inbound Webhook 通知后，服务端拉取完整邮件并写入 Turso/libSQL。
+- 邮件列表、详情、纯文本与净化后的 HTML 视图。
+- 过期地址不可读，旧邮件不会继承到新邮箱。
+- `SITE_NAME` 可配置品牌名，前台显示为 `@SITE_NAME`。
+- HMAC 验签、事件幂等、多收件人匹配和事务入库。
+
+## 技术栈
+
+TanStack Start、TanStack Query、React 19、Tailwind CSS 4、Kumo UI、Drizzle ORM、Turso/libSQL、Mailtrap Inbound、Nitro、Bun。
+
+## 本地开发
+
+要求：Bun 1.4+；真实收件需要已绑定 catch-all 域名的 Mailtrap Inbound Inbox。
 
 ```bash
 bun install
-bun --bun run dev
+cp .env.example .env.local
+# 编辑 .env.local，填入下方环境变量
+bun run db:migrate
+bun run dev
 ```
 
-# Building For Production
+打开 <http://localhost:3000>。本地数据库默认为 `file:local.db`，已加入 `.gitignore`。
 
-To build this application for production:
+服务在首个请求时校验配置。仅调试页面时，Mailtrap 变量可以填任意非空占位值；需要真实收件时必须换成 Mailtrap 的真实值。
+
+### 本地联调真实收件
+
+1. 用 `cloudflared tunnel --url http://localhost:3000` 或 ngrok 暴露本地端口。
+2. 在 Mailtrap 创建 Inbound Webhook，URL 填 `https://<tunnel-host>/api/webhooks/mailtrap/inbound`，选择对应 Inbox。
+3. 在 Webhook 详情中复制自动生成的 Signing Secret，填入 `MAILTRAP_WEBHOOK_SIGNING_SECRET`，重启开发服务器。
+
+Mailtrap 不允许在后台填写自定义 Signing Secret；Secret 由 Mailtrap 自动生成，重置后旧值立即失效。
+
+## 环境变量
+
+| 变量                              | 必填 | 默认值          | 说明                                                   |
+| --------------------------------- | ---- | --------------- | ------------------------------------------------------ |
+| `DATABASE_URL`                    | 是   | `file:local.db` | 本地 libSQL 文件或 Turso `libsql://...` URL            |
+| `DATABASE_AUTH_TOKEN`             | 否   | 空              | Turso Token，本地文件不需要                            |
+| `SITE_NAME`                       | 否   | `ASTMS`         | 品牌名，显示为 `@SITE_NAME`，并用于页面标题            |
+| `MAILBOX_DOMAIN`                  | 是   | 无              | 裸域名，如 `mail.example.com`，不要带 `@` 或协议       |
+| `MAILBOX_TTL_SECONDS`             | 否   | `90`            | 匿名邮箱有效期，1–86400 秒                             |
+| `MAILBOX_POLL_INTERVAL_SECONDS`   | 否   | `10`            | 轮询间隔，1–300 秒                                     |
+| `MAILTRAP_API_TOKEN`              | 是   | 无              | Mailtrap API Token                                     |
+| `MAILTRAP_INBOX_ID`               | 是   | 无              | Inbound Inbox ID，必须是整数                           |
+| `MAILTRAP_WEBHOOK_SIGNING_SECRET` | 是   | 无              | Mailtrap 自动生成的 Webhook Signing Secret，不能自定义 |
+| `CRON_SECRET`                     | 是   | 无              | 内部清理接口的 Bearer Secret                           |
+| `BETTER_AUTH_URL`                 | 否   | 无              | Better Auth 占位配置                                   |
+| `BETTER_AUTH_SECRET`              | 建议 | 无              | Better Auth 占位配置，匿名邮箱流程不使用               |
+
+## 地址规则
+
+- 去空格并转小写，长度 6–32 位，只允许字母、数字和 `-`。
+- 必须以字母或数字开头和结尾；留空随机生成 10–12 位前缀。
+- 同一时刻同一地址只有一个有效邮箱；仍有效时再次打开会复用现有邮箱。
+- 过期后再次使用同一地址会创建新邮箱，不继承旧邮件。
+
+## 接口
+
+| 方法   | 路径                             | 说明                                                       |
+| ------ | -------------------------------- | ---------------------------------------------------------- |
+| `POST` | `/api/webhooks/mailtrap/inbound` | Mailtrap 入站 Webhook，使用 `mailtrap-signature` HMAC 验签 |
+| `POST` | `/api/internal/cleanup`          | 清理过期数据，需 `Authorization: Bearer $CRON_SECRET`      |
+| `GET`  | `/`                              | 页面入口                                                   |
+
+Webhook 只处理 `inbound.message_received`，按 `event_id` 和消息唯一约束保证幂等；请求体上限 1 MiB。
+
+## 常用命令
 
 ```bash
-bun --bun run build
+bun run dev          # 开发服务器
+bun run build        # 构建
+bun run preview      # 预览构建
+bun run db:generate  # 生成迁移
+bun run db:migrate   # 应用迁移
+bun run db:studio    # Drizzle Studio
+bun test             # 测试
+bun run lint         # ESLint
+bun run check        # Prettier 检查
+bunx tsc --noEmit    # 类型检查
 ```
 
-## Styling
+## 目录
 
-This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
-
-### Removing Tailwind CSS
-
-If you prefer not to use Tailwind CSS:
-
-1. Remove the demo pages in `src/routes/demo/`
-2. Replace the Tailwind import in `src/styles.css` with your own styles
-3. Remove `tailwindcss()` from the plugins array in `vite.config.ts`
-4. Remove `@tailwindcss/vite` and `tailwindcss` from `package.json`
-
-## Linting & Formatting
-
-This project uses [eslint](https://eslint.org/) and [prettier](https://prettier.io/) for linting and formatting. Eslint is configured using [tanstack/eslint-config](https://tanstack.com/config/latest/docs/eslint). The following scripts are available:
-
-```bash
-bun --bun run lint
-bun --bun run format
-bun --bun run check
+```text
+src/features/mailbox/   # 生命周期、Server Functions、页面组件
+src/features/mailtrap/  # 客户端、验签、Webhook 处理、HTML 净化
+src/routes/             # 首页、Webhook、清理接口
+src/db/                 # schema 与 libSQL 连接
+src/server/             # 配置、限流、写锁
 ```
-
-## Deploy with Nitro
-
-This project uses Nitro as a generic server adapter, so it can run on any Node-compatible host.
-
-```bash
-npm run build
-node dist/server/index.mjs
-```
-
-The build output is a self-contained Node server. To deploy, push the `dist/` directory to your host (Render, Fly.io, your own VPS, etc.) and run the server command above.
-
-For host-specific presets (Vercel, Netlify, Cloudflare, AWS Lambda, etc.) and tuning, see https://v3.nitro.build/deploy.
-
-## Setting up Better Auth
-
-1. Generate and set the `BETTER_AUTH_SECRET` environment variable in your `.env.local`:
-
-   ```bash
-   bunx --bun @better-auth/cli secret
-   ```
-
-2. Visit the [Better Auth documentation](https://www.better-auth.com) to unlock the full potential of authentication in your app.
-
-### Adding a Database (Optional)
-
-Better Auth can work in stateless mode, but to persist user data, add a database:
-
-```typescript
-// src/lib/auth.ts
-import { betterAuth } from 'better-auth'
-import { Pool } from 'pg'
-
-export const auth = betterAuth({
-  database: new Pool({
-    connectionString: process.env.DATABASE_URL,
-  }),
-  // ... rest of config
-})
-```
-
-Then run migrations:
-
-```bash
-bunx --bun @better-auth/cli migrate
-```
-
-## Routing
-
-This project uses [TanStack Router](https://tanstack.com/router) with file-based routing. Routes are managed as files in `src/routes`.
-
-### Adding A Route
-
-To add a new route to your application just add a new file in the `./src/routes` directory.
-
-TanStack will automatically generate the content of the route file for you.
-
-Now that you have two routes you can use a `Link` component to navigate between them.
-
-### Adding Links
-
-To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
-
-```tsx
-import { Link } from '@tanstack/react-router'
-```
-
-Then anywhere in your JSX you can use it like so:
-
-```tsx
-<Link to="/about">About</Link>
-```
-
-This will create a link that will navigate to the `/about` route.
-
-More information on the `Link` component can be found in the [Link documentation](https://tanstack.com/router/v1/docs/framework/react/api/router/linkComponent).
-
-### Using A Layout
-
-In the File Based Routing setup the layout is located in `src/routes/__root.tsx`. Anything you add to the root route will appear in all the routes. The route content will appear in the JSX where you render `{children}` in the `shellComponent`.
-
-Here is an example layout that includes a header:
-
-```tsx
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
-
-export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: 'utf-8' },
-      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'My App' },
-    ],
-  }),
-  shellComponent: ({ children }) => (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <header>
-          <nav>
-            <Link to="/">Home</Link>
-            <Link to="/about">About</Link>
-          </nav>
-        </header>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  ),
-})
-```
-
-More information on layouts can be found in the [Layouts documentation](https://tanstack.com/router/latest/docs/framework/react/guide/routing-concepts#layouts).
-
-## Server Functions
-
-TanStack Start provides server functions that allow you to write server-side code that seamlessly integrates with your client components.
-
-```tsx
-import { createServerFn } from '@tanstack/react-start'
-
-const getServerTime = createServerFn({
-  method: 'GET',
-}).handler(async () => {
-  return new Date().toISOString()
-})
-
-// Use in a component
-function MyComponent() {
-  const [time, setTime] = useState('')
-
-  useEffect(() => {
-    getServerTime().then(setTime)
-  }, [])
-
-  return <div>Server time: {time}</div>
-}
-```
-
-## API Routes
-
-You can create API routes by using the `server` property in your route definitions:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-import { json } from '@tanstack/react-start'
-
-export const Route = createFileRoute('/api/hello')({
-  server: {
-    handlers: {
-      GET: () => json({ message: 'Hello, World!' }),
-    },
-  },
-})
-```
-
-## Data Fetching
-
-There are multiple ways to fetch data in your application. You can use TanStack Query to fetch data from a server. But you can also use the `loader` functionality built into TanStack Router to load the data for a route before it's rendered.
-
-For example:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-
-export const Route = createFileRoute('/people')({
-  loader: async () => {
-    const response = await fetch('https://swapi.dev/api/people')
-    return response.json()
-  },
-  component: PeopleComponent,
-})
-
-function PeopleComponent() {
-  const data = Route.useLoaderData()
-  return (
-    <ul>
-      {data.results.map((person) => (
-        <li key={person.name}>{person.name}</li>
-      ))}
-    </ul>
-  )
-}
-```
-
-Loaders simplify your data fetching logic dramatically. Check out more information in the [Loader documentation](https://tanstack.com/router/latest/docs/framework/react/guide/data-loading#loader-parameters).
-
-# Learn More
-
-You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
-
-For TanStack Start specific documentation, visit [TanStack Start](https://tanstack.com/start).
